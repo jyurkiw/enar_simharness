@@ -1,0 +1,24 @@
+[project]
+name = "dnd5e-data"
+version = "0.1.0"
+description = "Shared TOML creature/board library (characters/, monsters/, boards/) — data only, no code"
+readme = "README.md"
+authors = [
+    { name = "Jeffrey Yurkiw", email = "jyurkiw@yahoo.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+# dev-only: validates this package's own board TOML files load cleanly.
+# The distributed package stays dependency-free (data only); dnd-board is
+# only ever used here as a validation tool, never imported by dnd5e_data
+# itself.
+dev = ["pytest", "dnd-board"]
+
+[tool.uv.sources]
+dnd-board = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"

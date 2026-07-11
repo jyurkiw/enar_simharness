@@ -470,10 +470,11 @@ parser is reused. `dnd_board.loaders.load_board_toml(path)` returns a `Board`; n
 ```toml
 name = "shadow_cave"
 
-[meta]
-cell_feet = 5
-diagonal = "chebyshev"       # chebyshev | 5105
-
+# `map` MUST come before any [table] header (here, [meta] and [glyph.*]) —
+# TOML has no syntax to "close" a table and return to the root, so a scalar
+# key written after [meta] would parse as meta.map, not the top-level `map`
+# this loader expects. Keep every top-level scalar (name, map, ...) above the
+# first table header.
 map = """
 ##############################
 #............................#
@@ -485,10 +486,17 @@ map = """
 ##############################
 """
 
+[meta]
+cell_feet = 5
+diagonal = "chebyshev"       # chebyshev | 5105
+
 # Glyph tables exactly as in the current palette format. A board may omit
-# glyphs to inherit the default palette; local entries override.
+# glyphs to inherit the default palette; local entries override. Terrain is
+# one of open|difficult|impassable (terrain.py's TERRAIN_BY_NAME) — not
+# free-form names like "wall".
 [glyph.'#']
-terrain = "wall"
+terrain = "impassable"
+cover = "full"
 blocks_los = true
 blocks_light = true
 
@@ -496,9 +504,11 @@ blocks_light = true
 terrain = "difficult"
 
 [glyph.'x']
+terrain = "impassable"
 cover = "half"
 
 [glyph.'o']
+terrain = "impassable"
 cover = "three_quarters"
 blocks_los = false
 

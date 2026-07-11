@@ -1,0 +1,40 @@
+# A small featureless walled room, standing in for the old engine's "abstract"
+# mode (board = None, front/back positioning only) now that a board is always
+# required (design doc 00, decision D5). Party and monster spawn blocks are 6
+# cells apart at the closest point (x=2 to x=8, 30 ft) so melee combatants
+# (speed_ft=30 = 6 cells/turn) reach each other within round 1, reproducing
+# the old "melee always in reach" abstract behavior. Each spawn block holds 6
+# cells (2x3), round-robin assigned — comfortably covers every migrated sim's
+# party/monster count. No interior terrain features; every migrated
+# abstract-mode sim uses this board unless its own parity specifically needs
+# geometry (see design doc 05's per-sim migration checklist).
+name = "plain_room"
+
+map = """
+##############
+#............#
+#PP.....MM...#
+#PP.....MM...#
+#PP.....MM...#
+#............#
+#............#
+##############
+"""
+
+[meta]
+cell_feet = 5
+diagonal = "chebyshev"
+
+[glyph.'#']
+terrain = "impassable"
+cover = "full"
+blocks_los = true
+blocks_light = true
+
+[glyph.'P']
+terrain = "open"
+spawn = "party"
+
+[glyph.'M']
+terrain = "open"
+spawn = "monsters"

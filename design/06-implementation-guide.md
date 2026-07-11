@@ -47,6 +47,26 @@ codebase and will not re-derive design decisions.
 6. **uv**: run things inside a project's environment with
    `uv run --project <dir> python <script>`. After editing any `pyproject.toml`, run
    `uv sync` in that project. Workspace members share one lock file at the root.
+6b. **Out-of-tree workspace members work (confirmed in Phase 2).** `dnd_board` lives at
+   `E:\Repos\simulations\dnd_board` — a sibling of `simharness_v2\`, not nested inside it,
+   and it's its own separate git repo. Adding `"../dnd_board"` to
+   `[tool.uv.workspace] members` in `simharness_v2\pyproject.toml` works fine (`uv sync
+   --all-packages` picks it up, `dnd_board` becomes importable to other members). This
+   is a one-way relationship: `dnd_board` run standalone from its own directory
+   (`cd dnd_board && uv run pytest`) is completely unaffected — uv's workspace discovery
+   walks *up* from cwd, and `dnd_board`'s parent is the bare repo root, not
+   `simharness_v2`, so it never sees that workspace unless invoked with
+   `--project simharness_v2` or from inside it. When running a member's tests through the
+   combined workspace, pass an explicit test path (`uv run --project ../dnd_board pytest
+   ../dnd_board/tests`) — `--project` only selects the environment, not pytest's rootdir,
+   and pytest otherwise discovers tests from the current working directory. **This bites
+   in the other direction too, confirmed in Phase 2**: running bare `uv run --project
+   simharness pytest` (no path) from `simharness_v2\` picked up `dnd5e_data`'s tests as
+   well (87 collected, not 82) once `dnd5e_data/tests/` existed alongside `simharness/`,
+   because pytest recurses from cwd regardless of which project's environment `--project`
+   selected. **Always pass an explicit test directory** — `pytest <member>/tests` — for
+   any member's suite when invoking from the workspace root; only a bare `cd <member> &&
+   uv run pytest` reliably scopes to one package.
 6a. **`uv sync` at the workspace root only syncs the root project's own dependencies —
    confirmed in Phase 1.** The root `pyproject.toml` deliberately has `dependencies = []`
    (it's just the workspace container); running bare `uv sync` from `simharness_v2\` syncs
@@ -259,13 +279,51 @@ Steps:
    from monster spawns) with `P`/`M` spawn glyphs. One shared
    `dnd5e_data/boards/plain_room.toml` is fine unless a sim's parity requires a variant.
 
-### Definition of done (Phase 2)
-- [ ] Round-trip test green: `load_board_toml(arena.toml)` equals the Board from
+### Definition of done (Phase 2) — all complete as of 2026-07-11
+- [x] Round-trip test green: `load_board_toml(arena.toml)` equals the Board from
       `load_npz(arena.npz)` — compare all four numpy layers, `spawns`, `cell_feet`,
-      `diagonal`.
-- [ ] Ragged map, unknown glyph key, unknown terrain each raise a load error naming the
-      file (tests).
-- [ ] Existing `dnd_board` test suite untouched and green.
+      `diagonal` (`dnd_board/tests/test_loaders.py`, plus a second round-trip test against
+      the ASCII source directly). Also verified cross-package: the *actual*
+      `dnd5e_data/boards/arena.toml` library file round-trips against the compiled npz too
+      (checked ad hoc, not just the test fixture copy).
+- [x] Ragged map, unknown glyph key, unknown terrain, unknown cover, missing `name`,
+      missing `map` each raise a load error naming the file (13 tests in
+      `test_loaders.py`, incl. partial-glyph-override-inherits-defaults and
+      no-overrides-uses-pure-default-palette).
+- [x] Existing `dnd_board` test suite untouched and green (35 original + 13 new = 48,
+      confirmed both standalone (`cd dnd_board && uv run pytest`) and through the
+      combined `simharness_v2` workspace).
+
+Two real bugs found and fixed during this phase (both were genuine defects, not just
+test-fixture mistakes — the first was in the design doc's own board TOML example):
+
+1. **Doc 01's board TOML example had `map` nested under `[meta]`, silently, because TOML
+   has no syntax to "close" a table.** Any `key = value` written after a `[table]` header
+   belongs to that table until the next header — there is no way to return to the root
+   table. The design doc's original example put `map = """..."""` *after* `[meta]`,
+   which parses as `meta.map`, not the top-level `map` the loader (and every worked
+   example elsewhere) assumes. Fixed by moving `map` above `[meta]`/`[glyph.*]` in doc 01
+   §2's example, with a comment explaining why the ordering matters — verified empirically
+   with `tomllib` before and after. **Author board TOML with every top-level scalar key
+   (`name`, `map`) before the first `[table]` header, always.**
+2. The same doc 01 example also had `terrain = "wall"` (not a valid terrain name — only
+   `open`/`difficult`/`impassable` per `terrain.py`'s `TERRAIN_BY_NAME`) and was missing
+   `cover = "full"` on the wall glyph. Both fixed in the doc.
+
+Implementation notes for later phases: `dnd_board/src/dnd_board/fileio.py` gained a
+private `_parse_lines(lines, palette, *, size, board_name, meta_name)` shared by
+`parse_ascii` (unchanged public behavior, verified byte-for-byte via the pre-existing
+test suite) and the new `loaders.load_board_toml`. Board TOML's rectangularity rule is
+**stricter** than the legacy ASCII-file format: `parse_ascii` still pads short rows with
+open floor (editor-trailing-whitespace tolerance); `load_board_toml` treats any row whose
+length differs from row 0 as a load error, validated in `loaders._extract_map_lines`
+*before* `_parse_lines` ever sees the lines. `dnd5e_data` (new package,
+`simharness_v2/dnd5e_data/`) ships `boards/arena.toml` (ported from the legacy ASCII
+source) and `boards/plain_room.toml` (14x8, spawn blocks 30 ft/6 cells apart — the
+replacement for every formerly-abstract-mode sim), each with its own dev-only validation
+test suite (`dnd5e_data/tests/test_boards.py`, depends on `dnd_board` via
+`{ workspace = true }` since it's already a workspace member — a plain path dependency on
+a workspace member is rejected by uv).
 
 ---
 
