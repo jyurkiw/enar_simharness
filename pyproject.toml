@@ -4,4 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.13"
 
 [tool.uv.workspace]
-members = []    # simharness, dnd_board, dnd5e, dnd5e_data added in later phases
+members = [
+    "simharness",
+]    # simharness, dnd_board, dnd5e, dnd5e_data added in later phases

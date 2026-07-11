@@ -1,0 +1,27 @@
+[project]
+name = "simharness"
+version = "0.1.0"
+description = "Game-agnostic Monte Carlo simulation harness: trial loop, seeding, ledger, stats, reporting, sweeps"
+readme = "README.md"
+authors = [
+    { name = "Jeffrey Yurkiw", email = "jyurkiw@yahoo.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "looper",
+    "py-die-roller",
+    "rich",
+    "matplotlib",
+    "numpy",
+]
+
+[tool.uv.sources]
+py-die-roller = { git = "https://github.com/jyurkiw/py-die-roller.git" }
+looper = { git = "https://github.com/jyurkiw/looper.git" }
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"

@@ -47,6 +47,18 @@ codebase and will not re-derive design decisions.
 6. **uv**: run things inside a project's environment with
    `uv run --project <dir> python <script>`. After editing any `pyproject.toml`, run
    `uv sync` in that project. Workspace members share one lock file at the root.
+6a. **`uv sync` at the workspace root only syncs the root project's own dependencies —
+   confirmed in Phase 1.** The root `pyproject.toml` deliberately has `dependencies = []`
+   (it's just the workspace container); running bare `uv sync` from `simharness_v2\` syncs
+   the shared `.venv` down to *that* (i.e. empty), uninstalling every member package
+   (`simharness`, later `dnd5e` etc.) even though they're listed in
+   `[tool.uv.workspace] members`. This happened once already — caught immediately because
+   the very next `pytest` run failed with `ModuleNotFoundError`. **Always use
+   `uv sync --all-packages`** when syncing from the workspace root; `uv sync` (no flag)
+   from *inside* a specific member directory (e.g. `simharness/`) is fine and only affects
+   that member's own deps. If a `pytest`/import suddenly fails right after any `uv sync`,
+   re-sync with `--all-packages` before debugging further — check this before assuming the
+   code broke.
 7. **Determinism**: ALL randomness must flow through the per-trial `Dice` stream handed to
    the game system. If you ever reach for `random`, `numpy.random`, or a fresh `Dice()`,
    that is a bug.
@@ -158,12 +170,18 @@ per variant using the same mutation code (easiest: temporarily copy the loop int
 `capture_masks.py` beside it that dumps `ctx.ledger.rows` per variant instead of charts).
 Do not modify `simulation.py` itself.
 
-### Definition of done (Phase 0)
-- [ ] `masked_troubadour.toml` parses.
-- [ ] Root `pyproject.toml` exists; `uv sync` at root succeeds.
-- [ ] `sims/<label>/baseline/rows.json` + `meta.json` exist for every row of the matrix.
-- [ ] Running capture twice for one sim produces identical `rows.json` (determinism).
-- [ ] Every old sim still runs unmodified (`uv run python src/simulation.py` in each dir).
+### Definition of done (Phase 0) — all complete as of 2026-07-11
+- [x] `masked_troubadour.toml` parses (fix was on line 37, not 38 as originally estimated).
+- [x] Workspace root `pyproject.toml` exists at `simharness_v2\pyproject.toml`; `uv sync`
+      there succeeds.
+- [x] `sims/<label>/baseline/rows.json` + `meta.json` exist for every row of the matrix
+      (18 files: 13 matrix rows, masks expanding to 6 party×strategy variants).
+- [x] Running capture twice for one sim produces identical `rows.json` — **only true with
+      `PYTHONHASHSEED` pinned** (see Global Gotcha 7a); confirmed byte-identical at 10k
+      trials for both otyugh_cr5_dps (grapple-affected) and all 6 masks variants
+      (unaffected, confirmed anyway) with `PYTHONHASHSEED=0`.
+- [x] Every old sim still runs unmodified — spot-checked `board_demo` and
+      `otyugh_shadow_board` post-fix; both ran clean.
 
 ---
 
@@ -192,13 +210,31 @@ The coin-flip acceptance game ([02 §7](02-simharness.md)) lives in
 `simharness/tests/test_acceptance_coinflip.py` and is the template consumers follow —
 write it carefully.
 
-### Definition of done (Phase 1)
-- [ ] `uv run --project simharness pytest` green.
-- [ ] Coin-flip game runs 1000 trials; `summarize` matches analytic mean within 3σ.
-- [ ] Determinism tests pass ([02 §7](02-simharness.md) items 2).
-- [ ] Stream-independence check: correlation between trial-stream outputs ≈ 0
-      ([05 §Risks](05-migration-plan.md)).
-- [ ] `compare(rows, rows)` passes at zero tolerance.
+### Definition of done (Phase 1) — all complete as of 2026-07-11
+- [x] `uv run --project simharness pytest` green (82 tests, all modules:
+      config/ledger/stats/plugin/runner/report/sweep + acceptance + determinism +
+      stream-independence).
+- [x] Coin-flip game runs 1000 trials; `summarize` matches analytic mean within 3σ
+      (`test_coinflip_1000_trials_matches_analytic_mean_within_3_standard_errors`,
+      fixed seed, confirmed not an outlier by also passing at 5000 trials/10 SE).
+- [x] Determinism tests pass ([02 §7](02-simharness.md) items 2) — same-seed
+      byte-identical rows, and trial *i* identical whether `trials=i+1` or `trials=1000`
+      (`test_runner.py`).
+- [x] Stream-independence check: correlation between trial-stream outputs ≈ 0
+      ([05 §Risks](05-migration-plan.md)) — pairwise Pearson correlation < 0.05 across 5
+      spawned streams, plus a check that streams aren't shifted copies of each other
+      (`test_stream_independence.py`).
+- [x] `compare(rows, rows)` passes at zero tolerance
+      (`test_compare_identical_rows_passes_at_literal_zero_tolerance`).
+- [x] 2-axis sweep over the coin-flip game produces 6 variants + a comparison table
+      ([02 §7](02-simharness.md) item 3, `test_acceptance_sweep.py`) — not just the
+      abstract-dict sweep unit tests in `test_sweep.py`.
+
+One gotcha hit and fixed during this phase, recorded as Global Gotcha 6a above:
+**always `uv sync --all-packages` from the workspace root**, never a bare `uv sync` there
+— it silently uninstalls every workspace member (confirmed: wiped `simharness` itself
+right after this phase's tests were passing; caught immediately by the next `pytest` run
+failing with `ModuleNotFoundError`, fixed by re-syncing with the flag).
 
 ---
 
