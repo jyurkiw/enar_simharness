@@ -1,0 +1,56 @@
+# Hunter Ranger, level 5. Ported from
+# dnd5e_combat/characters/hunter_ranger/defaults.toml. PHASE 3
+# SIMPLIFICATION: the old engine switches to `shortsword` when grappled (and
+# fights with disadvantage against a different grappler), maintains Hunter's
+# Mark as a `damage_rider` on the marked enemy, adds Colossus Slayer once per
+# turn, and drops Hunter's Mark on a failed Concentration save when hit —
+# TODO(phase4/5): the grapple-conditional weapon swap needs
+# `[[behavior.targeting]]`/ability `target_filter`; the rider dice need
+# `damage_rider`; Concentration needs a `taking_damage` reaction (design doc
+# 04 section 4's trigger catalog already has it, just unused here). This file
+# always fires the longbow twice with no riders; `shortsword`,
+# `hunters_mark_die`, `colossus_slayer_die` are kept as unused data/abilities
+# for Phase 4/5 to wire up.
+name = "hunter_ranger"
+display_name = "Hunter Ranger"
+
+[classification]
+level = 5
+
+[stats]
+strength = 10
+dexterity = 18
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 16
+speed = 30
+initiative_bonus = 7
+
+[stats.health]
+average = 44
+
+[stats.saves]
+constitution = 2
+
+[abilities.longbow]
+kind = "attack"
+to_hit = 9
+damage = "1d8+4"
+damage_type = "piercing"
+range_normal = 150
+range_long = 600
+
+[abilities.shortsword]
+kind = "attack"
+to_hit = 7
+damage = "1d6+4"
+damage_type = "piercing"
+
+[multiattack.standard]
+actions = ["longbow", "longbow"]
+priority = 0
+
+[behavior]
+tactic = "kite"

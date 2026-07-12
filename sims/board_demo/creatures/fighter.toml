@@ -1,0 +1,36 @@
+# Sim-local: board_demo's inline fighter (dnd/board_demo/src/scenario.toml),
+# not the shared champion_fighter archetype — different stats, kept
+# sim-local per design doc 01 section 3.2.
+name = "fighter"
+display_name = "Fighter"
+
+[classification]
+level = 5
+
+[stats]
+strength = 16
+dexterity = 10
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 18
+speed = 30
+initiative_bonus = 2
+reach = 5
+
+[stats.health]
+average = 45
+
+[abilities.longsword]
+kind = "attack"
+to_hit = 7
+damage = "1d8+4"
+damage_type = "slashing"
+
+[multiattack.standard]
+actions = ["longsword", "longsword"]
+priority = 0
+
+[behavior]
+tactic = "engage"

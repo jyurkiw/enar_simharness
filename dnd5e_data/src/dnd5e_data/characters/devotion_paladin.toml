@@ -1,0 +1,54 @@
+# Oath of Devotion Paladin, level 5. Ported from
+# dnd5e_combat/characters/devotion_paladin/defaults.toml. PHASE 3
+# SIMPLIFICATION: Great Weapon Fighting (reroll 1s/2s), Great Weapon Master's
+# crit-chained bonus attack, and Divine Smite-on-crit are Python-policy-only
+# and not representable yet — TODO(phase4/5): GWF needs a reroll effect
+# primitive akin to Savage Attacker's gap (see champion_fighter.toml);
+# Divine Smite needs conditional (`on_crit`) resource-spending, which the
+# `on_crit` effect list *can* express once `spend_resource` +
+# `damage_rider` land (design doc 03 section 4's table already has both —
+# just not wired into this file yet). `resources.smite_1`/`smite_2` are kept
+# so Phase 4/5 only needs to add the `on_crit` effect, not redefine the pool.
+name = "devotion_paladin"
+display_name = "Devotion Paladin"
+
+[classification]
+level = 5
+
+[stats]
+strength = 19
+dexterity = 10
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 16
+ac = 18
+speed = 30
+initiative_bonus = 0
+
+[stats.health]
+average = 44
+
+[stats.saves]
+constitution = 2
+
+[resources.smite_1]
+uses = 4
+per = "encounter"
+
+[resources.smite_2]
+uses = 2
+per = "encounter"
+
+[abilities.greatsword]
+kind = "attack"
+to_hit = 7
+damage = "2d6+4"
+damage_type = "slashing"
+
+[multiattack.standard]
+actions = ["greatsword", "greatsword"]
+priority = 0
+
+[behavior]
+tactic = "engage"

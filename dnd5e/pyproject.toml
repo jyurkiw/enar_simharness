@@ -1,0 +1,31 @@
+[project]
+name = "dnd5e"
+version = "0.1.0"
+description = "D&D 5e (2024) rules engine implementing simharness.GameSystem — data-driven, no creature-specific code"
+readme = "README.md"
+authors = [
+    { name = "Jeffrey Yurkiw", email = "jyurkiw@yahoo.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "simharness",
+    "dnd-board",
+    "dnd5e-data",
+    "py-die-roller",
+]
+
+[tool.uv.sources]
+simharness = { workspace = true }
+dnd-board = { workspace = true }
+dnd5e-data = { workspace = true }
+py-die-roller = { git = "https://github.com/jyurkiw/py-die-roller.git" }
+
+[dependency-groups]
+dev = ["pytest"]
+
+[project.scripts]
+dnd5e-sim = "dnd5e.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"

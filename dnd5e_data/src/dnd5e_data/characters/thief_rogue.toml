@@ -1,0 +1,47 @@
+# Thief Rogue, level 5. Ported from
+# dnd5e_combat/characters/thief_rogue/defaults.toml. PHASE 3 SIMPLIFICATION:
+# the old engine adds a once-per-turn Cunning Strike rider (6d6 sneak attack
+# on a crit; otherwise alternating 2d6 poison/trip once both are stacked,
+# 3d6) and halves the first hit it takes each round via Uncanny Dodge —
+# TODO(phase4/5): the rider needs `damage_rider` wired into `on_hit`/`on_crit`
+# with a toggle tracked in `turn_scratch` (the alternating-effect logic
+# itself has no expression-language equivalent yet and may need the escape
+# hatch); Uncanny Dodge needs the `reduce_damage` primitive flagged in design
+# doc 04 section 4 (same gap as the Barbarian's Rage resistance). This file
+# always makes 2 plain dagger attacks with no riders and no damage reduction.
+name = "thief_rogue"
+display_name = "Thief Rogue"
+
+[classification]
+level = 5
+tags = ["skirmisher"]
+
+[stats]
+strength = 10
+dexterity = 18
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 15
+speed = 30
+initiative_bonus = 4
+
+[stats.health]
+average = 38
+
+[stats.saves]
+constitution = 2
+
+[abilities.dagger]
+kind = "attack"
+to_hit = 7
+damage = "1d4+4"
+damage_type = "piercing"
+
+[multiattack.standard]
+actions = ["dagger", "dagger"]
+priority = 0
+
+[behavior]
+tactic = "engage"

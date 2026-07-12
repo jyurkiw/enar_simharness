@@ -1,0 +1,77 @@
+# Otyugh, CR 5. Ported from dnd5e_combat/monsters/otyugh/defaults.toml (SRD
+# p.313) for exact stat fidelity (ac/hp/to-hit/damage/saves all match the old
+# engine's real values, not the illustrative rewrite in design doc 01 section
+# 1.11).
+#
+# PHASE 3 SIMPLIFICATION: the old engine chose between three multiattack
+# patterns based on live grapple state — grab two different enemies with
+# tentacles; bite a captive + grab another; slam two captives with
+# tentacle_slam (dnd5e_combat/monsters/otyugh/__init__.py). Expression-driven
+# multiattack selection (`when = "count(enemies_grappled_by_self) == ..."`)
+# is Phase 4 (design doc 04), so this file has a single always-selected
+# option approximating the old engine's no-captives-yet default, constrained
+# to one target since Phase 3 can't split actions across targets within one
+# multiattack option. `tentacle_slam` is defined but unreachable until
+# Phase 4 adds the grapple-state-gated options from design doc 01 section
+# 1.11 (the full, non-simplified acid-test example) — see design doc 06's
+# Phase 3 completion notes for the parity impact of this simplification.
+name = "otyugh"
+display_name = "Otyugh"
+
+[classification]
+size = "Large"
+type = "Aberration"
+alignment = "Neutral"
+cr = 5
+
+[stats]
+strength = 16
+dexterity = 10
+constitution = 18
+intelligence = 10
+wisdom = 12
+charisma = 10
+ac = 14
+speed = 30
+initiative_bonus = 0
+
+[stats.health]
+average = 104
+
+[stats.saves]
+dexterity = 0
+constitution = 7
+wisdom = 1
+
+[stats.senses]
+darkvision = 120
+passive_perception = 11
+
+[abilities.bite]
+kind = "attack"
+to_hit = 6
+damage = "2d8+3"
+damage_type = "piercing"
+
+[abilities.tentacle]
+kind = "attack"
+to_hit = 6
+damage = "2d8+3"
+damage_type = "piercing"
+on_hit = [ { effect = "attach_condition", condition = "grappled", escape_dc = 13 } ]
+
+[abilities.tentacle_slam]
+kind = "save"
+ability = "constitution"
+dc = 14
+damage = "3d8+3"
+damage_type = "bludgeoning"
+half_on_save = true
+on_fail = [ { effect = "attach_condition", condition = "stunned" } ]
+
+[multiattack.grab_two]
+actions = ["tentacle", "tentacle"]
+priority = 0
+
+[behavior]
+tactic = "engage"

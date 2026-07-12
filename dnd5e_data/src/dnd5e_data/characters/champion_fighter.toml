@@ -1,0 +1,44 @@
+# Champion Fighter, level 5. Ported from
+# dnd5e_combat/characters/champion_fighter/defaults.toml. PHASE 3
+# SIMPLIFICATION: Savage Attacker (reroll one weapon damage die per turn) is
+# Python-policy-only in the old engine and isn't representable by the v1
+# effect-primitive registry yet — TODO(phase4): add `damage_reroll_keep_best`
+# to effects.py and a matching trait once it's needed.
+name = "champion_fighter"
+display_name = "Champion Fighter"
+
+[classification]
+level = 5
+tags = ["tank"]
+
+[stats]
+strength = 19
+dexterity = 10
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 21
+speed = 30
+initiative_bonus = 1
+crit_range = 19
+
+[stats.health]
+average = 44
+
+[stats.saves]
+constitution = 2
+
+[abilities.longsword]
+kind = "attack"
+to_hit = 7
+damage = "1d8+4"
+damage_type = "slashing"
+crit_range = 19
+
+[multiattack.standard]
+actions = ["longsword", "longsword"]
+priority = 0
+
+[behavior]
+tactic = "engage"

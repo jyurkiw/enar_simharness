@@ -1,0 +1,34 @@
+# Sim-local: board_demo's inline barbarian (dnd/board_demo/src/scenario.toml).
+name = "barbarian"
+display_name = "Barbarian"
+
+[classification]
+level = 5
+
+[stats]
+strength = 16
+dexterity = 10
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 15
+speed = 40
+initiative_bonus = 1
+reach = 5
+
+[stats.health]
+average = 55
+
+[abilities.greataxe]
+kind = "attack"
+to_hit = 7
+damage = "1d12+4"
+damage_type = "slashing"
+
+[multiattack.standard]
+actions = ["greataxe", "greataxe"]
+priority = 0
+
+[behavior]
+tactic = "engage"

@@ -1,0 +1,36 @@
+# Sim-local: board_demo's inline archer (dnd/board_demo/src/scenario.toml).
+name = "archer"
+display_name = "Archer"
+
+[classification]
+level = 5
+
+[stats]
+strength = 10
+dexterity = 16
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 15
+speed = 30
+initiative_bonus = 3
+reach = 5
+
+[stats.health]
+average = 38
+
+[abilities.longbow]
+kind = "attack"
+to_hit = 7
+damage = "1d8+4"
+damage_type = "piercing"
+range_normal = 150
+range_long = 600
+
+[multiattack.standard]
+actions = ["longbow", "longbow"]
+priority = 0
+
+[behavior]
+tactic = "kite"

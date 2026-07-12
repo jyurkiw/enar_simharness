@@ -538,11 +538,12 @@ Rules:
 name = "otyugh_shadow_board"
 description = "Shadow Otyugh vs the standard party in its dark cave."
 
-[simulation]
-trials = 10000
-max_rounds = 10
-seed = 8675309
-hp_mode = "average"          # average | rolled (rolled uses stats.health.hit_dice)
+# `board` and `sources` are top-level scalars — like board TOML's `map`
+# (section 2), they MUST come before the first `[table]` header ([simulation]
+# here), or TOML parses them as e.g. `simulation.board` instead of the
+# top-level `board` this loader expects. TOML has no syntax to "close" a
+# table and return to root, so keep every top-level scalar together, above
+# every table header.
 
 # Board: path relative to this file, or "lib:<name>" for dnd5e_data/boards/<name>.toml
 board = "boards/shadow_cave.toml"
@@ -553,6 +554,12 @@ board = "boards/shadow_cave.toml"
 #   3. dnd5e_data (characters/ then monsters/)
 # First hit wins, so a sim-local file shadows the library.
 sources = ["creatures"]
+
+[simulation]
+trials = 10000
+max_rounds = 10
+seed = 8675309
+hp_mode = "average"          # average | rolled (rolled uses stats.health.hit_dice)
 
 [[combatants]]
 creature = "shadow_otyugh"

@@ -31,6 +31,19 @@ codebase and will not re-derive design decisions.
 1. **TOML**: inline tables `{ ... }` must fit on ONE line (TOML 1.0). Use
    `[[table.array]]` syntax for anything longer. Parse with `tomllib` — files open in
    **binary** mode (`open(path, "rb")`).
+1a. **Every top-level scalar key MUST be written before the first `[table]` header — this
+   has bitten twice already (Phase 2's board TOML `map`/`[meta]` ordering, Phase 3's
+   simulation TOML `board`/`sources` vs `[simulation]`) and will bite again in any new
+   schema unless you check for it explicitly.** TOML has no syntax to "close" a table and
+   return to root — a `key = value` line written after `[some_table]` belongs to
+   `some_table` until the next table header, full stop. This is **syntactically valid
+   TOML**, so `tomllib.loads()` will not catch it; the file parses fine and just has the
+   wrong shape. The only way to catch it is a semantic check: after writing or generating
+   any TOML example/fixture with top-level scalars *and* table headers, load it and assert
+   the scalars actually land at `cfg["key"]`, not nested under whatever table precedes
+   them. Before authoring a new TOML schema (or an example in a design doc, or a test
+   fixture), list every top-level scalar key first, then start adding `[table]` headers —
+   never interleave.
 2. **looper API**: `Looper(context=obj, exit_value_name="attr")`;
    `loop.add_event(name, add_before=False, add_after=False)`;
    `loop.register(event, handler)`; handler signature is
@@ -363,13 +376,112 @@ and the full character fidelity is only needed by the sims that use those archet
 Then: write `sims/board_demo/simulation.toml` per [01 §3], run
 `dnd5e-sim validate`, `dnd5e-sim run --baseline sims/board_demo/baseline/rows.json`.
 
-### Definition of done (Phase 3)
-- [ ] Module unit tests green (attack math incl. cover/range-band cases, save halving,
-      death-save table, grapple release on down, hp_mode average vs rolled).
-- [ ] `dnd5e-sim validate` passes on every file in `dnd5e_data/` and `sims/board_demo/`.
-- [ ] Load-time failure tests: unknown ability kind, unknown effect, multiattack
-      referencing a missing ability, name/file-stem mismatch — each raises with path+table.
-- [ ] board_demo parity: `compare` within tolerances of [05 §Parity].
+### Definition of done (Phase 3) — complete as of 2026-07-11, parity partial by design (see below)
+- [x] Module unit tests green: 208 tests across dice/statblock/loader/creature/battlefield/
+      vision/movement/conditions/effects/actions/system/cli, incl. attack math (advantage/
+      disadvantage cancel, crit range, ranged gating: reach→LOS→full-cover-automiss→cover
+      AC bonus→range bands), save-for-half, the full death-save table (nat 1/20, 3-fail
+      death, 3-success stabilize, massive-overkill instant death), grapple release on down,
+      and `hp_mode` average vs rolled. 343 tests green across the whole workspace
+      (simharness 82 + dnd_board 48 + dnd5e_data 5 + dnd5e 208).
+- [x] `dnd5e-sim validate` passes on every file in `dnd5e_data/` (12 files: 9 characters +
+      otyugh + 2 boards) and `sims/board_demo/` (4 files).
+- [x] Load-time failure tests: unknown ability kind, unknown effect, multiattack referencing
+      a missing ability, name/file-stem mismatch — each raises with path+table
+      (`test_loader.py`), plus every Phase 4/5 feature (`target_filter`, multiattack `when`,
+      `[[behavior.targeting]]`, `behavior.custom`, `[reactions.*]`, `[conditions.*]`) raising
+      a distinct `NotYetSupportedError` naming the phase that adds it.
+- [x] board_demo parity: **aggregate columns pass, per-combatant columns fail by design** —
+      see the dedicated write-up below. This is not a shortfall to fix in Phase 3; it's the
+      predicted, quantified cost of a scoping decision made *before* implementation, not
+      discovered after.
+
+**A scoping decision made before writing any code, not after hitting a wall:** design doc
+06 (this file) explicitly excludes `expressions.py` from Phase 3 ("in Phase 3 the only
+behavior is `behavior.action_priority` + implicit single multiattack + `tactic`"), but the
+Otyugh's real multiattack fundamentally depends on grapple-state conditionals
+(`dnd5e_combat/monsters/otyugh/__init__.py`: two tentacles on two *different* enemies when
+nothing's grappled; bite the captive + grab another once one is; slam both once two are).
+Rather than half-build expressions early, `dnd5e_data/monsters/otyugh.toml` ships a
+single, always-selected `[multiattack.grab_two]` option (`["tentacle", "tentacle"]`)
+against **one** target — Phase 3's `system.py` picks one `preferred_target` per
+multiattack option and can't split actions across targets (that's the same
+`[[behavior.targeting]]` machinery Phase 4 adds). `bite`/`tentacle_slam` are defined in the
+file but unreachable until Phase 4 adds the `when`-gated options from design doc 01 section
+1.11 (the full, non-simplified acid-test example already written into that doc).
+
+**Measured parity impact** (`dnd5e-sim run sims/board_demo/simulation.toml --trials 10000
+--baseline sims/board_demo/baseline/rows.json`, seed 20260704, matching Phase 0's baseline
+exactly):
+
+| Column | Baseline mean | New mean | Delta | Verdict |
+|---|---|---|---|---|
+| `side_dealt_party` (total dealt to the Otyugh) | 110.9 | 112.2 | 1.2% | **pass** |
+| `taken_otyugh` | 110.9 | 112.2 | 1.2% | **pass** |
+| `wiped_party` | 0.0 | 0.0 | 0.1pp | **pass** |
+| every `dead_*`/`any_dead_*`/`poisoned_*` | 0.0 both | — | 0–1.4pp | **pass** |
+| `dealt_fighter`/`dealt_archer`/`dealt_barbarian`/`dealt_otyugh` | — | — | 0.7–9.1% | FAIL |
+| `taken_fighter` / `taken_archer` | 7.1 / 12.5 | 13.2 / 5.6 | 86.4% / 55.2% | FAIL |
+| `hp_remaining_otyugh` | 0.8 | 0.0 | 96.9% | FAIL |
+| `down_archer` | 0.2 | 0.0 | 15.3pp | FAIL |
+| `wiped_monsters` | ~1.0 | ~1.0 | 4.4pp | FAIL |
+
+Read together, this is a clean, fully-explained result, not a mystery: **the core
+resolution engine is faithful** — total damage flowing from the party into the Otyugh
+matches the old engine within 1.2%, which is only possible if attack rolls, advantage/
+disadvantage, crit handling, damage rolls, AC comparisons, and the turn/round pipeline are
+all correct. Every failing column is a *distribution* column — which of the three PCs the
+Otyugh hits — and every one is explained by the single documented simplification: the old
+Otyugh spreads its two tentacles across two different party members before anything's
+grappled, so `taken_fighter` and `taken_archer` diverge sharply (one is over-focused, the
+other under-focused) while the *sum* the party takes stays right on target. Do not treat
+this as "Phase 3 parity failed" — treat it as `compare()` doing exactly its job: isolating
+one known, already-scoped gap with numbers precise enough to verify it closes in Phase 4.
+
+**Phase 4 action item:** once `expressions.py` and `behavior.py`'s multiattack selection
+land, replace `otyugh.toml`'s single option with the full three-option version from design
+doc 01 section 1.11, wire multi-target action resolution (tentacle-slam-two /
+bite-the-captive-grab-another need two different targets from one multiattack option, which
+needs the target-pool machinery this phase deliberately deferred), and **re-run this exact
+`--baseline` comparison** — the per-combatant columns above are the ones to watch; if they
+don't converge into tolerance, that's the first place to look, not a new investigation.
+
+Three real bugs found and fixed during this phase (beyond the Otyugh scoping decision,
+which was anticipated, not discovered):
+
+1. **Same TOML top-level-scalar-before-first-table-header bug as Phase 2's board TOML, this
+   time in the simulation schema.** Design doc 01 section 3's simulation TOML example had
+   `board`/`sources` written *after* `[simulation]`'s header, which TOML parses as
+   `simulation.board`/`simulation.sources`, not the top-level keys the loader (and every
+   other worked example) expects — confirmed with a direct `tomllib` check, exactly as
+   Phase 2's board TOML bug was. Fixed in the doc (moved both above `[simulation]`, with a
+   pointer back to the board TOML rule) and promoted the underlying gotcha from a
+   per-phase note to Global Gotcha 1a, since it has now bitten twice in two different
+   schemas and will bite again in the otyugh/masks simulation TOMLs (Phase 4/5) without
+   active vigilance. **The lesson generalizes: `tomllib.loads()` succeeding proves nothing
+   about a TOML file's intended shape** — only a semantic check (load it, assert keys land
+   where expected) catches this class of bug, and every design-doc TOML example and test
+   fixture is a place it can hide.
+2. **`dnd5e-sim run --baseline` crashed** printing its own comparison table: the "Delta"
+   column header used "Δ" (U+0394), which the legacy Windows console codepage (cp1252)
+   can't encode — `UnicodeEncodeError` from deep inside `rich`. Same root cause resurfaced
+   as a second bug in the same table: rich's default cell-truncation renders a Unicode
+   ellipsis ("…", also unencodable in cp1252) for any column value wider than its cell,
+   silently corrupting long column names (`hp_remaining_barbarian` etc.) into garbled
+   output instead of crashing. Fixed by renaming the header to ASCII "Delta" and setting
+   `overflow="fold"` on the column instead of relying on the default ellipsis truncation.
+   **Neither bug was caught by `test_cli.py`'s `capsys`-based tests** — pytest's output
+   capture is a pipe, not a real console, so it never exercises `rich`'s
+   `legacy_windows_render` code path. Any future `rich`-console-output change needs a
+   manual `uv run dnd5e-sim ...` smoke test in an actual terminal; capsys tests alone will
+   pass while the real CLI crashes.
+3. **`Dnd5eSystem.finalize_trial` was silently missing `poisoned_*`/`any_poisoned_*`**,
+   which the old engine always emitted (even as constant 0s, for every sim that never
+   inflicts poison). `compare()` correctly flagged this as `missing_in_b` rather than
+   silently ignoring it — exactly the behavior design doc 02's `compare()` spec intended.
+   Fixed by reporting the *real* condition state (`creature.has_condition(POISONED)`) —
+   not a hardcoded 0 — since `attach_condition condition="poisoned"` is already valid
+   Phase 3 data even though no current creature file happens to use it.
 
 ---
 

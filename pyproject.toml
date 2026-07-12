@@ -8,4 +8,5 @@ members = [
     "simharness",
     "../dnd_board",
     "dnd5e_data",
+    "dnd5e",
 ]    # dnd5e added in Phase 3

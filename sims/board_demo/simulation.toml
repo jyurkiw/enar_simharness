@@ -1,0 +1,46 @@
+# Board Demo - Arena: a single CR5 Otyugh vs a level-5 party on the arena
+# board. Ported from dnd/board_demo/src/scenario.toml — the first Phase 3
+# migration target (design doc 05/06). Party stats are sim-local
+# (creatures/); the Otyugh resolves through the source chain to the shared
+# dnd5e_data/monsters/otyugh.toml library file.
+name = "board_demo"
+description = "Board Demo - Arena"
+
+board = "lib:arena"
+sources = ["creatures"]
+
+[simulation]
+trials = 500
+max_rounds = 6
+seed = 20260704
+
+[[combatants]]
+creature = "fighter"
+side = "party"
+start = [2, 13]
+
+[[combatants]]
+creature = "barbarian"
+side = "party"
+start = [2, 16]
+
+[[combatants]]
+creature = "archer"
+side = "party"
+start = [2, 14]
+
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+start = [26, 14]
+
+# The old scenario overrode the Otyugh's speed to 20 ft for this specific
+# encounter (its archetype default is 30 ft) — see dnd/board_demo/src/scenario.toml.
+[overrides.otyugh]
+stats.speed = 20
+
+[environment]
+focus = "otyugh"
+
+[output]
+report = ["totals", "by_combatant"]

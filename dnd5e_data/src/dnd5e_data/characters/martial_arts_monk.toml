@@ -1,0 +1,52 @@
+# Unarmed Monk ("martial arts only"), level 5. Ported from
+# dnd5e_combat/characters/martial_arts_monk/defaults.toml. PHASE 3
+# SIMPLIFICATION: the old engine bursts to Flurry of Blows + a Stunning
+# Strike attempt on round 1 or whenever an ally is Down, and fights at
+# disadvantage when grappled by someone other than its target —
+# TODO(phase4): the burst condition needs conditional multiattack
+# (`round() == 1 or any(allies, is_down(it))`); Stunning Strike needs
+# `require_save` wired into `on_hit` gated by `resource_available("ki")`;
+# the grapple-disadvantage needs `target_filter`. This file always makes 3
+# unarmed strikes (2 Extra Attack + the un-burst Martial Arts bonus attack),
+# no Stunning Strike, no disadvantage handling. `resources.ki` is kept for
+# Phase 4/5 to spend.
+name = "martial_arts_monk"
+display_name = "Martial Arts Monk"
+
+[classification]
+level = 5
+tags = ["skirmisher"]
+
+[stats]
+strength = 10
+dexterity = 18
+constitution = 12
+intelligence = 10
+wisdom = 16
+charisma = 10
+ac = 17
+speed = 30
+initiative_bonus = 4
+
+[stats.health]
+average = 38
+
+[stats.saves]
+constitution = 1
+
+[resources.ki]
+uses = 5
+per = "encounter"
+
+[abilities.unarmed]
+kind = "attack"
+to_hit = 7
+damage = "1d8+4"
+damage_type = "bludgeoning"
+
+[multiattack.standard]
+actions = ["unarmed", "unarmed", "unarmed"]
+priority = 0
+
+[behavior]
+tactic = "engage"

@@ -1,0 +1,49 @@
+# Path of the Berserker Barbarian, level 5. Ported from
+# dnd5e_combat/characters/berserker_barbarian/defaults.toml. PHASE 3
+# SIMPLIFICATION: the old engine's Reckless Attack (advantage both ways),
+# Great Weapon Master (+proficiency on one hit, bonus attack after a crit),
+# the dynamic 3-4 attack chain, and Rage's physical-damage resistance are all
+# Python-policy-only and not representable by v1's declarative vocabulary or
+# effect-primitive registry — TODO(phase4/5): Reckless Attack needs a
+# self-applied condition granting both `grant_advantage_to_attackers` and an
+# attack-roll advantage grant (new primitives); GWM's crit-chain needs
+# conditional multiattack selection; Rage resistance needs a `reduce_damage`
+# primitive (flagged in design doc 04 section 4 for the Rogue's Uncanny
+# Dodge, same gap). This file uses a flat 3-attack multiattack (the 2 Extra
+# Attack + 1 Frenzy baseline, no crit-chained 4th) with none of those riders.
+name = "berserker_barbarian"
+display_name = "Berserker Barbarian"
+
+[classification]
+level = 5
+tags = ["tank"]
+
+[stats]
+strength = 19
+dexterity = 14
+constitution = 16
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 15
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 45
+
+[stats.saves]
+constitution = 3
+
+[abilities.greataxe]
+kind = "attack"
+to_hit = 7
+damage = "1d12+6"
+damage_type = "slashing"
+
+[multiattack.standard]
+actions = ["greataxe", "greataxe", "greataxe"]
+priority = 0
+
+[behavior]
+tactic = "engage"

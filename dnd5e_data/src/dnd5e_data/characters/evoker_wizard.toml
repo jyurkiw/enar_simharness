@@ -1,0 +1,46 @@
+# Evoker Wizard, level 5. Ported from
+# dnd5e_combat/characters/evoker_wizard/defaults.toml. PHASE 3
+# SIMPLIFICATION: the old engine's round-1 Lightning Bolt opener (LOS-gated),
+# fallback to Fire Bolt, and Thunderwave-if-grappled branch are all
+# conditional Python-policy logic — TODO(phase4): round-conditional ability
+# selection needs `[[behavior.targeting]]`/`when` support on multiattack
+# options (`round() == 1`), which this file doesn't use yet. This file always
+# casts Fire Bolt; `lightning_bolt_damage`/`thunderwave_damage` are kept as
+# plain data (not wired to any ability) so Phase 4 only needs to add the
+# conditional options, not the numbers.
+name = "evoker_wizard"
+display_name = "Evoker Wizard"
+
+[classification]
+level = 5
+
+[stats]
+strength = 10
+dexterity = 10
+constitution = 14
+intelligence = 19
+wisdom = 10
+charisma = 10
+ac = 11
+speed = 30
+initiative_bonus = 1
+
+[stats.health]
+average = 32
+
+[stats.saves]
+constitution = 2
+
+[abilities.fire_bolt]
+kind = "attack"
+to_hit = 7
+damage = "2d10"
+damage_type = "fire"
+range_normal = 120
+
+[multiattack.standard]
+actions = ["fire_bolt"]
+priority = 0
+
+[behavior]
+tactic = "kite"

@@ -1,0 +1,50 @@
+# Way of the Open Hand Monk, level 5. Ported from
+# dnd5e_combat/characters/open_hand_monk/defaults.toml. PHASE 3
+# SIMPLIFICATION: the old engine spends 1 ki for Flurry of Blows (two bonus
+# attacks) whenever ki is available, and attempts Stunning Strike on the
+# first hit — TODO(phase4): Flurry needs conditional multiattack
+# (`resource_available("ki")`, matching the "abilities with costs make the
+# option ineligible" rule in design doc 04 section 2); Stunning Strike needs
+# `require_save` wired into `on_hit`. This file always makes 2 unarmed
+# strikes (Extra Attack only, no Flurry, no Stunning Strike).
+# `resources.ki` is kept for Phase 4/5 to spend.
+name = "open_hand_monk"
+display_name = "Open Hand Monk"
+
+[classification]
+level = 5
+tags = ["skirmisher"]
+
+[stats]
+strength = 10
+dexterity = 18
+constitution = 12
+intelligence = 10
+wisdom = 16
+charisma = 10
+ac = 17
+speed = 30
+initiative_bonus = 4
+
+[stats.health]
+average = 38
+
+[stats.saves]
+constitution = 1
+
+[resources.ki]
+uses = 5
+per = "encounter"
+
+[abilities.unarmed]
+kind = "attack"
+to_hit = 7
+damage = "1d6+4"
+damage_type = "bludgeoning"
+
+[multiattack.standard]
+actions = ["unarmed", "unarmed"]
+priority = 0
+
+[behavior]
+tactic = "engage"
