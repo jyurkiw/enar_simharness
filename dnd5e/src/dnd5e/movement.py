@@ -37,6 +37,39 @@ def hold(actor: Creature, target: Optional[Creature], battlefield: Battlefield) 
     return
 
 
+def move_to_cell(actor: Creature, dest: Optional[tuple[int, int]], battlefield: Battlefield) -> None:
+    """Move as far toward an explicit destination cell as speed allows — the
+    escape hatch's `plan_movement` hook (design doc 04 section 5), for
+    bespoke movement no named tactic captures (e.g. dragging a captive away
+    from a light source). Unlike `_move_toward`, this has no notion of a
+    target creature to stop short of or move into reach of; it just spends
+    up to `actor.speed_ft` pathing toward `dest`, routing around other living
+    creatures, and drags along anyone it's grappling."""
+    if actor.coord is None or dest is None:
+        return
+    board = battlefield.board
+    start = actor.coord
+    occ = battlefield.occupied_cells(exclude=(actor.instance_name,))
+    route = _bpath.path(board, start, dest, blocked=occ)
+    if len(route) <= 1:
+        return
+    budget = board.feet_to_cells(actor.speed_ft)
+    cost = board.move_cost_grid()
+    for (ox, oy) in occ:
+        cost[oy, ox] = 0
+    spent = 0
+    new_pos = start
+    for cell in route[1:]:
+        cx, cy = cell
+        spent += int(cost[cy, cx])
+        if spent > budget:
+            break
+        new_pos = cell
+    actor.x, actor.y = new_pos
+    if battlefield.is_grappling(actor.instance_name):
+        _settle_captives(actor, start, battlefield)
+
+
 def engage(actor: Creature, target: Optional[Creature], battlefield: Battlefield) -> None:
     """Move into melee reach of `target` if not already there. No-op if
     already in reach, unplaced, or there's no target."""

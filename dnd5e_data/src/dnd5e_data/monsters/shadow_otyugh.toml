@@ -1,0 +1,142 @@
+# Shadow Otyugh, CR 7 (labeled) — "The Sewer Monster of Port-a-Lucine". Ported
+# from dnd5e_combat/monsters/shadow_otyugh/defaults.toml + __init__.py's
+# take_turn (design doc 05's migration checklist row 6-8). Same base stats as
+# otyugh.toml (still the un-retuned CR5 placeholders the design doc flags —
+# see the old defaults.toml's own warning) plus a poison bite and the
+# photophage/light-hunting behavior below.
+#
+# TASK #55 FINDING: most of the old policy turned out to be expressible
+# declaratively once broken into its actual conditions — only the
+# drag-into-darkness MOVEMENT genuinely needs the escape hatch (design doc 04
+# section 5's design-pressure rule: try declarative first, escape hatch only
+# for what's left over). Specifically:
+#   - "if bloodied, retreat and end the trial" -> `when = "is_bloodied(self)"`
+#     on `[multiattack.retreat]`.
+#   - "if grappling anything, always bite the captive + grab a fresh target"
+#     (the old policy's on-a-board `_drag_into_dark`, which — read closely —
+#     makes `slam_two`/`bite_and_grab` from the base 3-option table
+#     permanently unreachable once any grapple lands, even with 2+ captives;
+#     that's the OLD engine's actual behavior on a board, not a simplification
+#     introduced here) -> `when = "is_grappling(self)"` on
+#     `[multiattack.drag_and_bite]`, priority above the base table.
+#   - "hunt an ungrappled light source" -> `when = "any(enemies, has_condition
+#     (it, 'light_source') and not is_grappled(it))"` selects
+#     `[multiattack.hunt_light]`; `bite_open`/`tentacle_open`'s
+#     `target_filter = "has_condition(target, 'light_source')"` aims them at
+#     it without needing `choose_target`.
+#   - "flee from the party's light source, dragging captives" (drag_and_bite's
+#     movement) has no declarative equivalent (no "farthest reachable cell
+#     from X" primitive) -> `dnd5e_behaviors.shadow_otyugh.ShadowOtyughBrain.
+#     plan_movement`, the ONLY hook that class implements.
+#
+# DELIBERATE, PRE-REGISTERED SCOPE CUT: the bloodied retreat's "every melee
+# engager gets a parting attack of opportunity" needs Phase 5's reaction bus
+# (opportunity attacks aren't wired at all yet) — `end_trial`'s outcome here
+# is just `{retreated = 1}`, no `killed_on_retreat` (the old column would be
+# trivially always 0 without parting shots, so it's omitted rather than kept
+# as a meaningless always-0 column). `_hunt_light_source`'s "free a tentacle
+# by releasing an already-poisoned captive when both are occupied" also has
+# no hook to hang a side-effecting grapple-release off of; `hunt_light` here
+# uses whatever capacity the otyugh already has free (bite always lands on
+# the light source regardless; tentacle only grabs it if not already
+# grappling two captives, since `is_grappling(self)`'s higher-priority
+# `drag_and_bite` option wins whenever any grapple already exists anyway).
+name = "shadow_otyugh"
+display_name = "Shadow Otyugh"
+
+[classification]
+size = "Large"
+type = "Aberration"
+alignment = "Neutral"
+cr = 7
+
+[stats]
+strength = 16
+dexterity = 10
+constitution = 18
+intelligence = 10
+wisdom = 12
+charisma = 10
+ac = 14
+speed = 30
+initiative_bonus = 0
+
+[stats.health]
+average = 150
+
+[stats.saves]
+dexterity = 0
+constitution = 7
+wisdom = 1
+
+[stats.senses]
+darkvision = 120
+passive_perception = 11
+
+[traits.darkvision]
+effects = [ { effect = "darkvision_immunity" } ]
+
+[abilities.bite]                       # bites the existing captive (drag_and_bite)
+kind = "attack"
+to_hit = 6
+damage = "2d8+3"
+damage_type = "piercing"
+targets = "enemies_grappled_by_self"
+on_hit = [ { effect = "attach_condition", condition = "poisoned" } ]
+
+[abilities.bite_open]                  # bites whichever enemy is the light source (hunt_light)
+kind = "attack"
+to_hit = 6
+damage = "2d8+3"
+damage_type = "piercing"
+target_filter = "has_condition(target, 'light_source')"
+on_hit = [ { effect = "attach_condition", condition = "poisoned" } ]
+
+[abilities.tentacle]                   # grabs a fresh target, never a current captive
+kind = "attack"
+to_hit = 6
+damage = "2d8+3"
+damage_type = "piercing"
+target_filter = "not is_grappled_by(target, self)"
+on_hit = [ { effect = "attach_condition", condition = "grappled", escape_dc = 13 } ]
+
+[abilities.tentacle_open]              # grabs the light source specifically (hunt_light)
+kind = "attack"
+to_hit = 6
+damage = "2d8+3"
+damage_type = "piercing"
+target_filter = "has_condition(target, 'light_source')"
+on_hit = [ { effect = "attach_condition", condition = "grappled", escape_dc = 13 } ]
+
+[abilities.flee]
+kind = "utility"
+targets = "self"
+effects = [ { effect = "end_trial", outcome = { retreated = 1 } } ]
+
+[multiattack.retreat]
+actions = ["flee"]
+when = "is_bloodied(self)"
+priority = 60
+
+[multiattack.drag_and_bite]            # once grappling anything: always this (see header note)
+actions = ["bite", "tentacle"]
+when = "count(enemies_grappled_by_self) >= 1"
+priority = 50
+
+[multiattack.hunt_light]
+actions = ["bite_open", "tentacle_open"]
+when = "any(enemies, has_condition(it, 'light_source') and not is_grappled(it))"
+priority = 40
+
+[multiattack.grab_two]                 # nothing grappled, no light to hunt, not bloodied
+actions = ["tentacle", "tentacle"]
+priority = 0
+
+[behavior]
+tactic = "engage"
+
+[behavior.custom]
+handler = "python:dnd5e_behaviors.shadow_otyugh.ShadowOtyughBrain"
+
+[[behavior.targeting]]
+order = "random"   # ctx.choice in the old policy — same fix as otyugh.toml

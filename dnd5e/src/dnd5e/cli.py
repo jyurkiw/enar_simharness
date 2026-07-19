@@ -1,11 +1,14 @@
 """`dnd5e-sim` console entry point (design doc 03 section 6).
 
-Phase 3 scope: `run` and `validate` only. `sweep` (expand `[sweep]`, run
-variants, comparison table/chart) is deferred — nothing in `[sweep]` is
-consumed yet, so a simulation file that happens to have one just runs its
-base configuration. The Python escape-hatch `sys.path` wiring described in
-design doc 04 section 5 is Phase 4 (no creature can reference `behavior.custom`
-yet — the loader rejects it), but is harmless to set up now.
+Phase 4 adds `sweep` (expand `[sweep]`, run every variant, print a comparison
+table and optionally a chart — design doc 02 section 6), replacing the old
+per-sim hand-rolled sweep scripts (`masks/scaling.py`, `otyugh_cr5_compare`,
+`otyugh_cr5_monk`). `[sweep].columns` (a list of ledger column names) picks
+what the comparison table/chart show; defaults to `side_dealt_party`/
+`side_dealt_monsters` (always present — system.py's `finalize_trial` emits
+both) when a sim doesn't specify its own. The Python escape-hatch `sys.path`
+wiring described in design doc 04 section 5 is set up in `main()` but not
+otherwise consumed by this module.
 """
 
 from __future__ import annotations
@@ -17,17 +20,19 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
+from simharness import sweep as sweep_mod
 from simharness.report import print_report, save_charts
 from simharness.runner import TrialRunner
 from simharness.stats import CompareReport, compare
 
-from .loader import load_creature, load_simulation, load_toml_file
+from .loader import build_simulation, load_creature, load_simulation, load_toml_file
 from .system import Dnd5eSystem
 
 
 def _build_system_and_runner(spec, *, seed=None, trials=None):
     system = Dnd5eSystem(board=spec.board, roster=spec.roster, max_rounds=spec.max_rounds,
-                         hp_mode=spec.hp_mode, focus=spec.focus)
+                         hp_mode=spec.hp_mode, focus=spec.focus,
+                         obscurement=spec.obscurement, light_plan=spec.light_plan)
     names = [slot.instance_name for slot in spec.roster]
     side_of = {slot.instance_name: slot.side for slot in spec.roster}
     runner = TrialRunner(system, seed=seed if seed is not None else spec.seed,
@@ -80,6 +85,32 @@ def _run(args: argparse.Namespace) -> int:
         _print_compare_report(report, console)
         return 0 if report.passed else 1
 
+    return 0
+
+
+def _sweep(args: argparse.Namespace) -> int:
+    console = Console()
+    path = Path(args.path)
+    cfg = load_toml_file(path)
+    variants = sweep_mod.expand(cfg)
+
+    ledgers = {}
+    for label, variant_cfg in variants:
+        spec = build_simulation(variant_cfg, sim_dir=path.parent, name_fallback=path.stem)
+        runner, trials = _build_system_and_runner(spec, seed=args.seed, trials=args.trials)
+        ledgers[label] = runner.run(trials=trials)
+
+    columns = cfg.get("sweep", {}).get("columns") or ["side_dealt_party", "side_dealt_monsters"]
+    title = f"{cfg.get('name', path.stem)} sweep ({len(variants)} variant(s))"
+    sweep_mod.comparison_table(ledgers, columns, title=title, console=console)
+
+    charts = cfg.get("output", {}).get("charts", ())
+    if charts:
+        out_dir = Path(args.out) if args.out else path.parent / cfg.get("output", {}).get("dir", "out")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        chart_path = sweep_mod.comparison_chart(
+            ledgers, columns, path=out_dir / f"{path.stem}_sweep.png", title=title)
+        console.print(f"chart: {chart_path}")
     return 0
 
 
@@ -136,6 +167,13 @@ def build_parser() -> argparse.ArgumentParser:
     validate_p = sub.add_parser("validate", help="Load-time validation only (a file or a directory)")
     validate_p.add_argument("path", help="A creature/board/simulation TOML file, or a directory to scan")
     validate_p.set_defaults(func=_validate)
+
+    sweep_p = sub.add_parser("sweep", help="Expand [sweep], run every variant, print a comparison table")
+    sweep_p.add_argument("path", help="Path to a simulation.toml with a [sweep] block")
+    sweep_p.add_argument("--seed", type=int, default=None, help="Override every variant's seed")
+    sweep_p.add_argument("--trials", type=int, default=None, help="Override every variant's trial count")
+    sweep_p.add_argument("--out", default=None, help="Override the chart output directory")
+    sweep_p.set_defaults(func=_sweep)
 
     return parser
 

@@ -1,0 +1,27 @@
+[project]
+name = "dnd5e-behaviors"
+version = "0.1.0"
+description = "Python escape-hatch Behavior classes (design doc 04 section 5) for creatures whose behavior isn't declaratively expressible — kept out of both dnd5e (no creature-specific code) and dnd5e-data (data only, no code)"
+readme = "README.md"
+authors = [
+    { name = "Jeffrey Yurkiw", email = "jyurkiw@yahoo.com" }
+]
+requires-python = ">=3.13"
+# Deliberately does NOT depend on `dnd5e` — `dnd5e` depends on THIS package
+# (so `dnd5e-sim`'s own environment has hatch classes importable), and a
+# package manager can't resolve a cycle. Hatch classes interact with
+# `Creature`/`Battlefield` instances via pure duck typing (see escape_hatch.
+# Behavior's protocol in dnd5e) rather than importing those types.
+dependencies = [
+    "dnd-board",
+]
+
+[tool.uv.sources]
+dnd-board = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"

@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 members = [
     "dnd-board",
     "dnd5e",
+    "dnd5e-behaviors",
     "dnd5e-data",
     "simharness",
     "simulations-workspace",
@@ -199,6 +200,7 @@ version = "0.1.0"
 source = { editable = "dnd5e" }
 dependencies = [
     { name = "dnd-board" },
+    { name = "dnd5e-behaviors" },
     { name = "dnd5e-data" },
     { name = "py-die-roller" },
     { name = "simharness" },
@@ -212,10 +214,30 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dnd-board", editable = "../dnd_board" },
+    { name = "dnd5e-behaviors", editable = "dnd5e_behaviors" },
     { name = "dnd5e-data", editable = "dnd5e_data" },
     { name = "py-die-roller", git = "https://github.com/jyurkiw/py-die-roller.git" },
     { name = "simharness", editable = "simharness" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
+
+[[package]]
+name = "dnd5e-behaviors"
+version = "0.1.0"
+source = { editable = "dnd5e_behaviors" }
+dependencies = [
+    { name = "dnd-board" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "dnd-board", editable = "../dnd_board" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest" }]

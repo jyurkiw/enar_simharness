@@ -4,11 +4,19 @@ into (design doc 06's "semantics to preserve exactly" list, sourced from
 `cure`/`simple_attack`). `CombatContext` is this engine's equivalent of the
 old `CombatContext` — constructed fresh each trial by `system.py`.
 
-Phase 3 explicitly omits (all later-phase territory): reaction interception
-(`_resolve_interception`, Phase 5), Bane/Bless d20 bonus/penalty dice
-(no Phase 3 creature casts them), the Bruiser's Mark (Phase 5), opportunity
-attacks (Phase 5). Ranged gating and HP/death-save/grapple-release sync are
-preserved exactly.
+Ranged gating and HP/death-save/grapple-release sync are preserved exactly.
+Phase 4 added Bane/Bless d20 bonus/penalty dice — `attack`/`saving_throw`
+consult `conditions.d20_dice` on top of any caller-supplied advantage/
+disadvantage. Phase 5 adds reaction interception (`attack` offers `ally_
+targeted_by_attack`/`self_targeted_by_attack` to the reaction bus *before*
+any roll, design doc 04 section 4's ordering invariant — a `redirect_attack`
+effect can change who the attack resolves against, `swap_positions` can
+change where either combatant stands, both complete before advantage/
+disadvantage/reach/cover/range are computed) and custom-condition grants
+(folded generically via `conditions.grants_for`, alongside the RAW-condition
+checks that already existed — the Bruiser's Mark's `impose_disadvantage_
+except_source` is exactly this, target-conditional so it can't be a blanket
+condition check).
 """
 
 from __future__ import annotations
@@ -21,6 +29,7 @@ from .battlefield import Battlefield
 from .creature import ConditionInstance, Creature
 from .dice import Resolver
 from .effects import EffectScope, apply_effects
+from .flags import FlagBag
 from .statblock import Ability
 
 
@@ -38,18 +47,82 @@ class CombatContext:
     round/turn bookkeeping itself (that's `system.py`) — just attack/save/
     damage/condition mechanics, shared by every trial via a fresh instance."""
 
-    def __init__(self, resolver: Resolver, battlefield: Battlefield, ledger) -> None:
+    def __init__(self, resolver: Resolver, battlefield: Battlefield, ledger, *,
+                 flags: Optional[FlagBag] = None, condition_defs: Optional[dict] = None) -> None:
         self.resolver = resolver
         self.battlefield = battlefield
         self.ledger = ledger
+        self.flags = flags if flags is not None else FlagBag()
+        # Workspace-wide `dict[str, statblock.ConditionDef]` (design doc 03
+        # section 3) — `system.py` builds this once from every roster
+        # member's `[conditions.*]`; a condition's *definition* lives on
+        # whichever creature file introduces it, but may be *attached* to a
+        # creature whose own file never defines it (the Bruiser's Mark,
+        # attached to party members).
+        self.condition_defs: dict = condition_defs if condition_defs is not None else {}
+        # `round_index`/`turn_order`: kept in sync by `system.py.take_turn`
+        # each call (cheap — just two attribute writes) so `attack()` can
+        # build a `behavior.BehaviorContext` for reaction `when` evaluation
+        # without every caller threading them through `resolve_ability`.
+        self.round_index = 0
+        self.turn_order: list = []
+        # `end_trial` state (design doc 03 section 4's `outcome?` primitive,
+        # the shadow-otyugh retreat's `force_trial_end` equivalent):
+        # `trial_ending` short-circuits `Dnd5eSystem.is_over`; `trial_outcome`
+        # accumulates any extra outcome keys to merge into `finalize_trial`'s
+        # result (e.g. `{"retreated": 1}`).
+        self.trial_ending = False
+        self.trial_outcome: dict = {}
+        # Reaction-effect side channel (design doc 04 section 4):
+        # `redirect_attack`/`swap_positions` write here; `attack()` reads it
+        # back immediately after offering the pre-roll reactions.
+        self._pending_redirect: Optional[Creature] = None
 
-    def roll(self, code: str) -> int:
-        return self.resolver.damage(code)
+    def roll(self, code: str, *, crit: bool = False) -> int:
+        return self.resolver.damage(code, crit=crit)
+
+    def set_flag(self, name: str, *, scope: str) -> None:
+        self.flags.set(name, scope=scope)
+
+    def end_trial(self, *, outcome: Optional[dict] = None) -> None:
+        self.trial_ending = True
+        if outcome:
+            self.trial_outcome.update(outcome)
+
+    def set_pending_redirect(self, to: Creature) -> None:
+        self._pending_redirect = to
+
+    def swap_positions(self, a: Creature, b: Creature) -> None:
+        if a.coord is not None and b.coord is not None:
+            a.x, a.y, b.x, b.y = b.x, b.y, a.x, a.y
+
+    def _offer_pre_attack_reactions(self, attacker: Creature, target: Creature, ability) -> Creature:
+        """Design doc 04 section 4's ordering invariant: `ally_targeted_by_
+        attack`/`self_targeted_by_attack` fire — and any redirect/swap they
+        cause completes — before any roll math. Returns the (possibly
+        redirected) target. A no-op with no matching reaction, so every sim
+        without a guardian draws the same dice as before."""
+        from . import reactions
+        from .behavior import BehaviorContext
+
+        self._pending_redirect = None
+        behavior_ctx = BehaviorContext(battlefield=self.battlefield, round_index=self.round_index,
+                                       turn_order=self.turn_order, flags=self.flags, resolver=self.resolver)
+        event = {"attacker": attacker, "target": target, "ability": ability}
+        allies = [c for c in self.battlefield.members(target.side) if c.instance_name != target.instance_name]
+        reactions.offer("ally_targeted_by_attack", event, candidates=allies,
+                        behavior_ctx=behavior_ctx, combat_ctx=self)
+        if self._pending_redirect is None:
+            reactions.offer("self_targeted_by_attack", event, candidates=[target],
+                            behavior_ctx=behavior_ctx, combat_ctx=self)
+        return self._pending_redirect if self._pending_redirect is not None else target
 
     def attack(self, attacker: Creature, target: Creature, *, bonus: int, damage: str,
                crit_range: int = 20, advantage: bool = False, disadvantage: bool = False,
-               normal_range: Optional[int] = None, long_range: Optional[int] = None) -> AttackOutcome:
+               normal_range: Optional[int] = None, long_range: Optional[int] = None,
+               ability: Optional[Ability] = None) -> AttackOutcome:
         bf = self.battlefield
+        target = self._offer_pre_attack_reactions(attacker, target, ability)
         # A condition on the target can hand every attacker advantage; a
         # condition on the attacker can impose disadvantage on it. Advantage
         # and disadvantage still cancel in the resolver.
@@ -57,6 +130,25 @@ class CombatContext:
             advantage = True
         if any(c.name in conditions.IMPOSES_ATTACK_DISADVANTAGE for c in attacker.conditions):
             disadvantage = True
+        if conditions.grants_for(target, "grant_advantage_to_attackers", condition_defs=self.condition_defs):
+            advantage = True
+        if conditions.grants_for(attacker, "impose_disadvantage", condition_defs=self.condition_defs):
+            disadvantage = True
+        # Target-conditional (can't be a blanket condition check): the
+        # Bruiser's Mark imposes disadvantage on the bearer's attacks against
+        # anyone *other* than the mark's source — attacking the source itself
+        # is penalty-free. Ends the moment the source is down (`ends_with_
+        # source`); attacking someone else stamps the generic marker the
+        # `attacked_other_than_source_this_turn` unless-predicate reads.
+        for instance in conditions.grants_for(attacker, "impose_disadvantage_except_source",
+                                              condition_defs=self.condition_defs):
+            source = self.battlefield.creatures.get(instance.source) if instance.source else None
+            if source is None or source.is_down:
+                attacker.remove_condition(instance.name)
+                continue
+            if target.instance_name != instance.source:
+                disadvantage = True
+                attacker.turn_scratch["attacked_other_than_source"] = True
         # Outside melee reach, this is a ranged attack: needs line of sight,
         # subject to cover, gated by range bands.
         cover_bonus = 0
@@ -72,9 +164,11 @@ class CombatContext:
                         return AttackOutcome(hit=False, crit=False, damage=0, target=target)
                     if dist > normal_range:
                         disadvantage = True
+        bonus_dice, penalty_dice = conditions.d20_dice(c.name for c in attacker.conditions)
         roll = self.resolver.attack(
             bonus, target.statblock.stats.ac + cover_bonus, crit_range=crit_range,
             advantage=advantage, disadvantage=disadvantage,
+            bonus_dice=bonus_dice, penalty_dice=penalty_dice,
         )
         base = self.resolver.damage(damage, crit=roll.crit) if (roll.hit and damage) else 0
         return AttackOutcome(hit=roll.hit, crit=roll.crit, damage=base, target=target,
@@ -82,8 +176,10 @@ class CombatContext:
 
     def saving_throw(self, creature: Creature, ability: str, dc: int, *,
                      advantage: bool = False, disadvantage: bool = False) -> bool:
+        bonus_dice, penalty_dice = conditions.d20_dice(c.name for c in creature.conditions)
         return self.resolver.save(creature.save_mod(ability), dc,
-                                  advantage=advantage, disadvantage=disadvantage)
+                                  advantage=advantage, disadvantage=disadvantage,
+                                  bonus_dice=bonus_dice, penalty_dice=penalty_dice)
 
     def deal(self, attacker: Creature, target: Creature, amount: int, action_name: str,
              damage_type: Optional[str] = None) -> int:
@@ -161,7 +257,7 @@ def resolve_ability(ctx: CombatContext, actor: Creature, ability: Ability, targe
         for target in targets:
             _resolve_heal(ctx, actor, ability, target)
     elif ability.kind == "utility":
-        _resolve_utility(ctx, actor, ability)
+        _resolve_utility(ctx, actor, ability, targets)
     else:  # pragma: no cover - loader already enforces the closed kind vocab
         raise ValueError(f"unresolvable ability kind {ability.kind!r}")
 
@@ -169,11 +265,15 @@ def resolve_ability(ctx: CombatContext, actor: Creature, ability: Ability, targe
 def _resolve_attack(ctx: CombatContext, actor: Creature, ability: Ability, target: Creature) -> AttackOutcome:
     out = ctx.attack(actor, target, bonus=ability.to_hit or 0, damage=ability.damage or "",
                      crit_range=ability.crit_range, normal_range=ability.range_normal,
-                     long_range=ability.range_long)
+                     long_range=ability.range_long, ability=ability)
     defender = out.target or target
     if out.hit:
         ctx.deal(actor, defender, out.damage, ability.name, ability.damage_type)
-        scope = EffectScope(ctx=ctx, source=actor, target=defender)
+        # `event["crit"]`/`["advantaged"]`: on_hit effects (e.g. the Masked
+        # Hector's `damage_rider`) key their own dice off whether *this* hit
+        # was a crit/had advantage, same as the base damage did.
+        scope = EffectScope(ctx=ctx, source=actor, target=defender,
+                            event={"crit": out.crit, "advantaged": out.advantaged})
         apply_effects(ability.on_hit, scope)
         if out.crit:
             apply_effects(ability.on_crit, scope)
@@ -197,6 +297,10 @@ def _resolve_heal(ctx: CombatContext, actor: Creature, ability: Ability, target:
     return ctx.heal(target, amount)
 
 
-def _resolve_utility(ctx: CombatContext, actor: Creature, ability: Ability) -> None:
-    scope = EffectScope(ctx=ctx, source=actor, target=actor)
-    apply_effects(ability.effects, scope)
+def _resolve_utility(ctx: CombatContext, actor: Creature, ability: Ability, targets: list) -> None:
+    """Apply `ability.effects` to each of `targets` (e.g. a party-wide buff
+    with `targets = "allies"`), or to the actor itself if the ability
+    resolved no targets (e.g. a self-only buff with no `targets` override)."""
+    for target in (targets or [actor]):
+        scope = EffectScope(ctx=ctx, source=actor, target=target)
+        apply_effects(ability.effects, scope)

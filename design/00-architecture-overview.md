@@ -84,22 +84,32 @@ E:\Repos\simulations\
 ├── dnd5e/                   # 5e engine package + `dnd5e-sim` console script
 ├── dnd5e_data/              # shared TOML library: characters/ monsters/ boards/
 │                            #   (a package only so importlib.resources can find it)
+├── dnd5e_behaviors/         # Python escape-hatch Behavior classes (04 §5), added Phase 4 —
+│                            #   kept separate from both dnd5e (no creature-specific code) and
+│                            #   dnd5e_data (data only); "python:dnd5e_behaviors.<mod>.<Class>"
 ├── sims/                    # pure-data simulations
 │   └── <sim_name>/
 │       ├── simulation.toml
 │       ├── creatures/       # optional sim-local creatures/overrides
 │       ├── boards/          # optional sim-local boards
-│       └── behavior.py      # optional Python escape hatch
+│       └── behavior.py      # optional Python escape hatch (sim-local; shared hatches live in
+│                            #   dnd5e_behaviors/ instead — see e.g. shadow_otyugh's)
 ├── dnd5e_combat/            # OLD — frozen during migration, deleted in phase 6
 └── snss/, sim_template/     # out of scope (sim_template retired in phase 6)
 ```
 
-Dependency wiring (uv workspace members: `simharness`, `dnd_board`, `dnd5e`, `dnd5e_data`):
+Dependency wiring (uv workspace members: `simharness`, `dnd_board`, `dnd5e`, `dnd5e_data`,
+`dnd5e_behaviors`):
 
 - `simharness` → `looper`, `py-die-roller`, `rich`, `matplotlib`, `numpy`
-- `dnd5e` → `simharness`, `dnd_board`, `py-die-roller`
+- `dnd5e` → `simharness`, `dnd_board`, `dnd5e_data`, `dnd5e_behaviors`, `py-die-roller`
 - `dnd5e_data` → (nothing; data only)
-- `simharness` **never** imports `dnd5e` or `dnd_board`.
+- `dnd5e_behaviors` → `dnd_board` only — deliberately **not** `dnd5e` (which depends on
+  `dnd5e_behaviors`, so its own environment has hatch classes importable at run time; a
+  dependency back the other way would be a cycle). Hatch classes interact with `Creature`/
+  `Battlefield` via duck typing against `dnd5e.escape_hatch.Behavior`'s protocol, never an
+  import of it.
+- `simharness` **never** imports `dnd5e`, `dnd_board`, or `dnd5e_behaviors`.
 
 ## Decisions log
 

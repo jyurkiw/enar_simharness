@@ -4,6 +4,14 @@
 # Python-policy-only in the old engine and isn't representable by the v1
 # effect-primitive registry yet — TODO(phase4): add `damage_reroll_keep_best`
 # to effects.py and a matching trait once it's needed.
+#
+# PHASE 4 FIX (found via otyugh_shadow_solo's blanket-darkness smoke test):
+# a mundane weapon attack doesn't need `targets = "enemies"`'s default sight
+# requirement (design doc 04 section 3's "living *visible* enemies" default)
+# — RAW, Blinded imposes disadvantage on attacks, not an inability to attack
+# at all; only spells with a "target you can see" component need actual
+# sight. Without this, a blinded fighter (or any non-spellcasting weapon
+# user) can never select a target once obscured, which is wrong.
 name = "champion_fighter"
 display_name = "Champion Fighter"
 
@@ -35,6 +43,7 @@ to_hit = 7
 damage = "1d8+4"
 damage_type = "slashing"
 crit_range = 19
+targets = "enemies"   # a mundane weapon attack doesn't need sight — see header note
 
 [multiattack.standard]
 actions = ["longsword", "longsword"]

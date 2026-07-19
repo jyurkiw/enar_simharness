@@ -3,10 +3,25 @@ from dnd5e import conditions
 
 def test_raw_conditions_is_the_closed_doc03_set():
     assert conditions.RAW_CONDITIONS == {
-        "blinded", "charmed", "deafened", "frightened", "grappled",
+        "bane", "bless", "blinded", "charmed", "deafened", "frightened", "grappled",
         "incapacitated", "invisible", "paralyzed", "petrified", "poisoned",
         "prone", "restrained", "stunned", "unconscious",
     }
+
+
+def test_d20_dice_bless_grants_bonus_bane_grants_penalty():
+    bonus, penalty = conditions.d20_dice([conditions.BLESS])
+    assert bonus == ["1d4"]
+    assert penalty == []
+    bonus, penalty = conditions.d20_dice([conditions.BANE])
+    assert bonus == []
+    assert penalty == ["1d4"]
+
+
+def test_d20_dice_ignores_conditions_with_no_roll_effect():
+    bonus, penalty = conditions.d20_dice([conditions.GRAPPLED, conditions.POISONED])
+    assert bonus == []
+    assert penalty == []
 
 
 def test_engine_states_are_not_attachable():

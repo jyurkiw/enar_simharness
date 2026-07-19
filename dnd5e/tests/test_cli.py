@@ -174,3 +174,59 @@ def test_validate_missing_path_reports_no_files(tmp_path, capsys):
     empty_dir.mkdir()
     code = main(["validate", str(empty_dir)])
     assert code == 1
+
+
+def make_sweep_sim(tmp_path, *, trials=50, max_rounds=5, seed=1):
+    sim_dir, sim_toml = make_sim(tmp_path, trials=trials, max_rounds=max_rounds, seed=seed)
+    sim_toml.write_text(sim_toml.read_text() + '''
+[[sweep.axes]]
+target = "overrides.otyugh.stats.ac"
+values = [5, 30]
+''')
+    return sim_dir, sim_toml
+
+
+def test_sweep_runs_every_variant_and_prints_comparison_table(tmp_path, capsys):
+    sim_dir, sim_toml = make_sweep_sim(tmp_path, trials=100)
+    code = main(["sweep", str(sim_toml)])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "sweep" in out
+    assert "overrides.otyugh.stats.ac=5" in out
+    assert "overrides.otyugh.stats.ac=30" in out
+
+
+def test_sweep_low_ac_variant_takes_more_damage_than_high_ac_variant(tmp_path):
+    # A cheap end-to-end proof the two variants are actually distinct runs,
+    # not the same config executed twice: an AC-5 otyugh should be hit (and
+    # take damage) far more than an AC-30 one over the same trial count.
+    sim_dir, sim_toml = make_sweep_sim(tmp_path, trials=300)
+    from dnd5e.cli import _build_system_and_runner
+    from dnd5e.loader import build_simulation, load_toml_file
+    from simharness import sweep as sweep_mod
+
+    cfg = load_toml_file(sim_toml)
+    variants = sweep_mod.expand(cfg)
+    ledgers = {}
+    for label, variant_cfg in variants:
+        spec = build_simulation(variant_cfg, sim_dir=sim_toml.parent, name_fallback=sim_toml.stem)
+        runner, trials = _build_system_and_runner(spec)
+        ledgers[label] = runner.run(trials=trials)
+
+    low_ac_taken = sum(r.get("taken_otyugh", 0) for r in ledgers["overrides.otyugh.stats.ac=5"].rows)
+    high_ac_taken = sum(r.get("taken_otyugh", 0) for r in ledgers["overrides.otyugh.stats.ac=30"].rows)
+    assert low_ac_taken > high_ac_taken
+
+
+def test_sweep_with_no_axes_runs_the_single_base_variant(tmp_path, capsys):
+    sim_dir, sim_toml = make_sim(tmp_path, trials=20)
+    code = main(["sweep", str(sim_toml)])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "base" in out
+
+
+def test_sweep_trials_override(tmp_path, capsys):
+    sim_dir, sim_toml = make_sweep_sim(tmp_path, trials=100)
+    code = main(["sweep", str(sim_toml), "--trials", "10"])
+    assert code == 0  # just proving the override path doesn't error

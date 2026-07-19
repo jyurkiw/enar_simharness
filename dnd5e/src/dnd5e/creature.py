@@ -4,10 +4,11 @@ trial of a run (constructed once at roster build time); `reset_state()` is
 called at the start of each trial, mirroring `dnd5e_combat.combatant.Combatant`
 but split from its own frozen data (that's `Statblock` now).
 
-Phase 3 scope: no expiry clocks on conditions yet (`ConditionInstance` has no
-`expires` field) — nothing in this phase's exercised creature set needs one
-(see loader.py's module docstring). Bane/Bless-style d20 bonus/penalty dice
-are also unwired (no Phase 3 creature casts them).
+Phase 5 update: `ConditionInstance` gains `expires`/`unless`, copied from the
+attached condition's `ConditionDef` at attach time (`actions.apply_condition`)
+so `system.py`'s clock-tick steps don't need to re-look up the definition —
+see `conditions.py`'s module docstring for the clock-keyword/predicate
+registries this drives.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ class ConditionInstance:
     name: str
     source: Optional[str] = None       # the source creature's instance_name
     escape_dc: Optional[int] = None
+    expires: Optional[str] = None      # a clock keyword, copied from ConditionDef at attach time
+    unless: Optional[str] = None       # a predicate name, copied from ConditionDef at attach time
 
 
 @dataclass

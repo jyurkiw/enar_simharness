@@ -1,0 +1,120 @@
+# Masked Bruiser, CR 4. Ported from
+# dnd5e_combat/monsters/masked_bruiser/__init__.py + defaults.toml, tuned to
+# dnd/masks/src/scenario.toml's `[stats.masked_bruiser]` overrides (ac/hp/
+# rapier to_hit+damage below are those tuned values, not the archetype
+# defaults — this file bakes in the one set of numbers the masks sim
+# actually ran, matching Phase 4's otyugh.toml precedent of one creature file
+# per tuned identity rather than defaults+override).
+#
+# First node of the network: a low-DPR, high-HP bodyguard whose value is
+# control, not damage. Two Cruel Rapier attacks/turn, either of which MAY
+# place the Bruiser's Mark on a reachable priority striker; Deceptive Defense
+# (reaction) redirects an incoming attack from an ally onto itself and can
+# mark the attacker too.
+#
+# The Mark is `[conditions.marked]`: `impose_disadvantage_except_source`
+# (design doc 03 section 3) makes the marked creature's own attacks against
+# anyone but the Bruiser suffer disadvantage; `exclusive = "per_source"` is
+# RAW "only one creature marked at a time"; `expires = "end_of_bearer_turn"`
+# + `unless = "attacked_other_than_source_this_turn"` reproduces the old
+# engine's keep-alive rule exactly (system.py's clock tick/unless-predicate
+# machinery, design doc 03 section 3).
+#
+# "Reachable by a Hector" is approximated as "within 35 ft (30 speed + 5
+# reach) of an ally tagged 'hector'" — the masks sim's `[[combatants]]` tags
+# hector_a/hector_b `tags = ["hector"]` and ranger/rogue `tags =
+# ["priority_strike"]` (see sims/masks/simulation.toml).
+#
+# PRE-REGISTERED SCOPE CUT (parity escalation rule, design doc 06): the old
+# policy also (a) prefers NOT moving an already well-placed mark to a new
+# target on its own attack (`_mark_exploitable`) — the expression language
+# has no way to test "is there a currently-marked enemy AND is IT separately
+# near a hector" (two independent `any()` iterations can't nest, each `it`
+# rebind is a single slot) without an escape hatch; since the Bruiser
+# ordinarily attacks one target per turn, re-marking that same target is a
+# same-name no-op in practice, so this mostly affects the rare case where
+# Deceptive Defense marks a different ally than the Bruiser's own attack
+# target moments later — and (b) Sleight of Crowd (bonus action: swap places
+# with a threatened Poet) needs a "swap with the first poet ally" reference
+# the `swap_positions` effect's `with` field can't express (only "self" /
+# "target" / "event.<field>", no tag/selector lookup) — pure repositioning,
+# no damage/hit-rate effect, cut rather than extending the effect-ref
+# grammar under a deadline. Both are candidates for a small `expr:<selector>`
+# extension to `effects._resolve_ref` if measured parity (Task #70) needs
+# them.
+name = "masked_bruiser"
+display_name = "Masked Bruiser"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 4
+
+[stats]
+strength = 12
+dexterity = 18
+constitution = 14
+intelligence = 10
+wisdom = 12
+charisma = 10
+ac = 14
+speed = 30
+initiative_bonus = 4
+
+[stats.health]
+average = 104
+
+[stats.saves]
+dexterity = 6
+constitution = 4
+
+[conditions.marked]
+grants = [ { effect = "impose_disadvantage_except_source" } ]
+exclusive = "per_source"
+expires = "end_of_bearer_turn"
+unless = "attacked_other_than_source_this_turn"
+
+[abilities.rapier]
+kind = "attack"
+to_hit = 6
+damage = "1d8+4"
+damage_type = "piercing"
+on_hit = [
+  { effect = "attach_condition", condition = "marked", when = "has_tag(target, 'priority_strike') and any(allies_tagged('hector'), distance(it, target) <= 35)" },
+]
+
+[multiattack.standard]
+actions = ["rapier", "rapier"]
+
+# Deceptive Defense: swap with the threatened ally, redirect the attack onto
+# self, and (if the attacker is a reachable priority striker) mark it too —
+# design doc 04 section 4's ordering invariant (both complete before
+# advantage/disadvantage/AC are read) is enforced by actions.py's attack(),
+# not here. Held for a priority striker per the old policy's
+# `_priority_yet_to_act`: don't spend the reaction on a low-value attacker
+# while a ranger/rogue still has a turn coming this round.
+[reactions.deceptive_defense]
+trigger = "ally_targeted_by_attack"
+when = "distance(self, event.target) <= 30 and can_see(self, event.attacker) and (has_tag(event.attacker, 'priority_strike') or not any_yet_to_act(enemies_tagged('priority_strike')))"
+uses_reaction = true
+effects = [
+  { effect = "swap_positions", with = "target" },
+  { effect = "redirect_attack", to = "self" },
+  { effect = "attach_condition", condition = "marked", target = "event.attacker", when = "has_tag(event.attacker, 'priority_strike') and any(allies_tagged('hector'), distance(it, event.attacker) <= 35)" },
+]
+
+[behavior]
+tactic = "engage"
+
+# Favor a priority striker (ranger/rogue) a Hector can reach this round;
+# failing that, any priority striker; failing that, the declarative fallback
+# (nearest visible enemy) applies with no rule needed.
+[[behavior.targeting]]
+when = "has_tag(target, 'priority_strike') and any(allies_tagged('hector'), distance(it, target) <= 35)"
+order = "nearest"
+priority = 20
+
+[[behavior.targeting]]
+when = "has_tag(target, 'priority_strike')"
+order = "nearest"
+priority = 10

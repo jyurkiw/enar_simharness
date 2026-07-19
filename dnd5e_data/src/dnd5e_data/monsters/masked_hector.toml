@@ -1,0 +1,64 @@
+# Masked Hector, CR 3. Ported from
+# dnd5e_combat/monsters/masked_hector/__init__.py + defaults.toml, tuned to
+# dnd/masks/src/scenario.toml's `[stats.masked_hector]` overrides (ac/hp/
+# dagger_strike to_hit+damage below are those tuned values — see
+# masked_bruiser.toml's header for why this file bakes them in directly).
+#
+# The network's consumer: two Dagger Strikes/turn, each with two riders that
+# only fire when the network connects — `advantage_rider` (+2d6) when the
+# strike itself had Advantage (the Poet's Insult, read via
+# `event.advantaged`, set by actions.py's `_resolve_attack`), `mark_rider`
+# (+3d6) against a target carrying the Bruiser's Mark, which the strike also
+# consumes (`remove_condition`). Base damage is tiny; without the network
+# this creature is well below CR 3, which is the whole point the sim
+# measures.
+#
+# Targeting needs real per-trial memory ("stay on last round's target"
+# unless a fresh reachable Mark appears) the declarative `[[behavior.
+# targeting]]` system has no concept of (no state persists between a
+# creature's turns there) — `dnd5e_behaviors.masked_hector.MaskedHectorBrain`
+# is a direct, minimal port of the old policy's `_choose_target`. Multiattack
+# and movement (`tactic = "engage"`) stay fully declarative.
+name = "masked_hector"
+display_name = "Masked Hector"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 3
+
+[stats]
+strength = 10
+dexterity = 14
+constitution = 12
+intelligence = 10
+wisdom = 10
+charisma = 12
+ac = 16
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 60
+
+[stats.saves]
+dexterity = 4
+constitution = 3
+
+[abilities.dagger_strike]
+kind = "attack"
+to_hit = 6
+damage = "2d4+2"
+damage_type = "piercing"
+on_hit = [
+  { effect = "damage_rider", damage = "2d6", damage_type = "piercing", name = "advantage_rider", when = "event.advantaged" },
+  { effect = "damage_rider", damage = "3d6", damage_type = "piercing", name = "mark_rider", when = "has_condition(target, 'marked')" },
+  { effect = "remove_condition", condition = "marked", when = "has_condition(target, 'marked')" },
+]
+
+[multiattack.standard]
+actions = ["dagger_strike", "dagger_strike"]
+
+[behavior]
+tactic = "engage"
+custom.handler = "python:dnd5e_behaviors.masked_hector.MaskedHectorBrain"

@@ -1,13 +1,18 @@
 # Evoker Wizard, level 5. Ported from
-# dnd5e_combat/characters/evoker_wizard/defaults.toml. PHASE 3
-# SIMPLIFICATION: the old engine's round-1 Lightning Bolt opener (LOS-gated),
-# fallback to Fire Bolt, and Thunderwave-if-grappled branch are all
-# conditional Python-policy logic — TODO(phase4): round-conditional ability
-# selection needs `[[behavior.targeting]]`/`when` support on multiattack
-# options (`round() == 1`), which this file doesn't use yet. This file always
-# casts Fire Bolt; `lightning_bolt_damage`/`thunderwave_damage` are kept as
-# plain data (not wired to any ability) so Phase 4 only needs to add the
-# conditional options, not the numbers.
+# dnd5e_combat/characters/evoker_wizard/defaults.toml.
+#
+# PHASE 4: round-1 Lightning Bolt opener (LOS-gated, matching
+# dnd5e_combat/characters/evoker_wizard/__init__.py's take_turn) now expressed
+# via `round() == 1 and can_see(self, nearest_enemy)`; Fire Bolt is the
+# always-eligible fallback for every other round.
+#
+# REMAINING DELIBERATE CUT: the old policy's grapple response (Thunderwave the
+# grappler to try to break free — full negate on a successful Dex save,
+# otherwise self-ungrapple + damage) needs an effect that acts on the *source*
+# of an ability rather than its target, which the current `on_fail`/`on_hit`
+# effect model doesn't support. Low-frequency in these sims (the Otyugh grapples
+# whichever melee combatant is nearest, rarely the kiting wizard) — left for
+# whenever that effect-scope gap is closed.
 name = "evoker_wizard"
 display_name = "Evoker Wizard"
 
@@ -37,6 +42,19 @@ to_hit = 7
 damage = "2d10"
 damage_type = "fire"
 range_normal = 120
+
+[abilities.lightning_bolt]
+kind = "save"
+ability = "dexterity"
+dc = 14
+damage = "8d6"
+damage_type = "lightning"
+half_on_save = true
+
+[multiattack.opener]
+actions = ["lightning_bolt"]
+when = "round() == 1 and can_see(self, nearest_enemy)"
+priority = 10
 
 [multiattack.standard]
 actions = ["fire_bolt"]

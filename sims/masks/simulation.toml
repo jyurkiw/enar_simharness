@@ -1,0 +1,134 @@
+# The "masked guests" network on the arena board (1 Masked Bruiser CR4, 2
+# Masked Poets CR3, 2 Masked Hectors CR3) — a mutual-dependency monster
+# network, quantifying how much the network's synergy is worth and how fast
+# it collapses when the party breaks it. Ported from dnd/masks/src/
+# scenario.toml + simulation.py's two-party/three-strategy sweep.
+#
+#   * Poets (back) generate Advantage with Scathing Insult (a CHA save; on a
+#     fail the target grants advantage to its attackers — [conditions.insulted]).
+#   * Hectors (front) consume the Advantage (+2d6 rider) and the Bruiser's
+#     Mark (+3d6 rider).
+#   * Bruiser (mid) tanks and redirects hits (Deceptive Defense) and marks
+#     the party's priority strikers ([conditions.marked]).
+#
+# Base config below is the "adventurers" party focus-firing the first Hector
+# ("Natural" strategy) — a bare `dnd5e-sim run` exercises this. `[sweep]`
+# expands the full 2 parties x 3 focus-strategies (6 variants) matching
+# Phase 0's 6 captured baselines (Task #70's parity target):
+#
+#   Party axis   : "adventurers" (base) vs "beaumont_playtest" (lower-HP/CON
+#                  retune; hp / constitution / saves.constitution overrides
+#                  per dnd5e_combat/data/parties/beaumont_playtest.toml).
+#   Strategy axis: environment.focus = masked_hector_1 ("Natural" — leave the
+#                  network intact) / masked_poet_1 ("Break generator" — kill
+#                  the Advantage source) / masked_bruiser ("Break mark" —
+#                  kill the Mark source, and the tanking/redirection).
+#
+# `[[behavior.targeting]] order = "focus"` is what makes `environment.focus`
+# actually steer party targeting (design doc 04 section 3) — none of the 5
+# party archetypes define this rule themselves (it's masks-specific), so
+# it's injected per-member via `[overrides.<name>]` rather than editing the
+# shared dnd5e_data character files (would affect every other sim using
+# them). Both party variants below carry this override — see the sweep
+# axis's own comment for why it has to live inside the swept `overrides`
+# value (not a separate constant `[overrides]` table) despite being
+# identical in both variants: the party-variant axis has to replace each
+# member's overrides *wholesale*, and the HP/CON deltas only apply to one
+# of the two variants.
+name = "masks"
+description = "The masked-guests network: 1 Bruiser CR4 + 2 Poets CR3 + 2 Hectors CR3 vs a level-5 party"
+
+board = "lib:arena"
+
+[simulation]
+trials = 1000
+max_rounds = 8
+seed = 20260705
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+tags = ["priority_strike"]
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+tags = ["priority_strike"]
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "masked_bruiser"
+side = "monsters"
+spawn = "monsters"
+tags = ["bruiser"]
+
+[[combatants]]
+creature = "masked_hector"
+side = "monsters"
+spawn = "monsters"
+count = 2
+tags = ["hector"]
+
+[[combatants]]
+creature = "masked_poet"
+side = "monsters"
+spawn = "monsters"
+count = 2
+tags = ["poet"]
+
+[overrides.champion_fighter.behavior]
+targeting = [ { order = "focus" } ]
+
+[overrides.hunter_ranger.behavior]
+targeting = [ { order = "focus" } ]
+
+[overrides.thief_rogue.behavior]
+targeting = [ { order = "focus" } ]
+
+[overrides.life_cleric.behavior]
+targeting = [ { order = "focus" } ]
+
+[overrides.evoker_wizard.behavior]
+targeting = [ { order = "focus" } ]
+
+[environment]
+focus = "masked_hector_1"   # "Natural" strategy — overridden per sweep variant
+
+[[sweep.axes]]
+target = "overrides"
+# Each value replaces the ENTIRE [overrides.*] table for that variant — the
+# focus-targeting override (identical in both) has to be repeated inside
+# each value because this axis swaps the whole table, not individual
+# fields; there is no "base + delta" composition across sweep axes (design
+# doc 02 section 6: each axis's values are independent, cartesian-producted
+# with every other axis, not layered).
+values = [
+  { champion_fighter = { behavior = { targeting = [ { order = "focus" } ] } }, hunter_ranger = { behavior = { targeting = [ { order = "focus" } ] } }, thief_rogue = { behavior = { targeting = [ { order = "focus" } ] } }, life_cleric = { behavior = { targeting = [ { order = "focus" } ] } }, evoker_wizard = { behavior = { targeting = [ { order = "focus" } ] } } },
+  { champion_fighter = { behavior = { targeting = [ { order = "focus" } ] }, stats = { health = { average = 44 } } }, hunter_ranger = { behavior = { targeting = [ { order = "focus" } ] }, stats = { health = { average = 34 }, constitution = 10, saves = { constitution = 0 } } }, thief_rogue = { behavior = { targeting = [ { order = "focus" } ] }, stats = { health = { average = 33 }, constitution = 12, saves = { constitution = 1 } } }, life_cleric = { behavior = { targeting = [ { order = "focus" } ] }, stats = { health = { average = 33 }, constitution = 12, saves = { constitution = 1 } } }, evoker_wizard = { behavior = { targeting = [ { order = "focus" } ] }, stats = { health = { average = 22 }, constitution = 10, saves = { constitution = 0 } } } },
+]
+
+[[sweep.axes]]
+target = "environment.focus"
+values = ["masked_hector_1", "masked_poet_1", "masked_bruiser"]
+
+[sweep]
+columns = ["side_dealt_party", "side_dealt_monsters", "wiped_party", "wiped_monsters"]
+
+[output]
+report = ["totals", "by_combatant"]

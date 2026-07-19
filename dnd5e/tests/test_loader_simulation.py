@@ -1,6 +1,6 @@
 import pytest
 
-from dnd5e.loader import NotYetSupportedError, load_simulation
+from dnd5e.loader import load_simulation
 
 MINIMAL_STATS = """
 [stats]
@@ -237,7 +237,7 @@ focus = "otyugh"
     assert spec.focus == {"party": "otyugh"}
 
 
-def test_environment_obscurement_raises_not_yet_supported(tmp_path):
+def test_environment_obscurement_follows_parses(tmp_path):
     sim_dir = make_sim_dir(tmp_path)
     write_creature(sim_dir, "otyugh", SIMPLE_ABILITY)
     path = sim_toml(sim_dir, tables='''
@@ -248,9 +248,100 @@ spawn = "monsters"
 [[environment.obscurement]]
 kind = "darkness"
 radius = 30
+follows = "otyugh"
 ''')
-    with pytest.raises(NotYetSupportedError, match="Phase 4"):
+    spec = load_simulation(path)
+    assert len(spec.obscurement) == 1
+    region = spec.obscurement[0]
+    assert region.kind == "darkness" and region.radius_ft == 30 and region.follows == "otyugh"
+    assert region.center is None and region.start_round == 1
+
+
+def test_environment_obscurement_center_parses(tmp_path):
+    sim_dir = make_sim_dir(tmp_path)
+    write_creature(sim_dir, "otyugh", SIMPLE_ABILITY)
+    path = sim_toml(sim_dir, tables='''
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+[[environment.obscurement]]
+kind = "fog"
+radius = 15
+center = [4, 4]
+start_round = 2
+''')
+    spec = load_simulation(path)
+    region = spec.obscurement[0]
+    assert region.follows is None and region.center == (4, 4) and region.start_round == 2
+
+
+def test_environment_obscurement_needs_follows_or_center(tmp_path):
+    sim_dir = make_sim_dir(tmp_path)
+    write_creature(sim_dir, "otyugh", SIMPLE_ABILITY)
+    path = sim_toml(sim_dir, tables='''
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+[[environment.obscurement]]
+kind = "fog"
+radius = 15
+''')
+    with pytest.raises(ValueError, match="needs 'follows'"):
         load_simulation(path)
+
+
+def test_environment_obscurement_unknown_kind_rejected(tmp_path):
+    sim_dir = make_sim_dir(tmp_path)
+    write_creature(sim_dir, "otyugh", SIMPLE_ABILITY)
+    path = sim_toml(sim_dir, tables='''
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+[[environment.obscurement]]
+kind = "gloom"
+radius = 15
+follows = "otyugh"
+''')
+    with pytest.raises(ValueError, match="not one of"):
+        load_simulation(path)
+
+
+def test_environment_light_plan_parses(tmp_path):
+    sim_dir = make_sim_dir(tmp_path)
+    write_creature(sim_dir, "otyugh", SIMPLE_ABILITY)
+    path = sim_toml(sim_dir, tables='''
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+[environment.light_plan]
+source = "otyugh"
+round = 2
+''')
+    spec = load_simulation(path)
+    assert spec.light_plan.source == "otyugh"
+    assert spec.light_plan.round == 2
+    assert spec.light_plan.costs_action is True
+
+
+def test_environment_light_plan_costs_action_false(tmp_path):
+    sim_dir = make_sim_dir(tmp_path)
+    write_creature(sim_dir, "otyugh", SIMPLE_ABILITY)
+    path = sim_toml(sim_dir, tables='''
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+[environment.light_plan]
+source = "otyugh"
+round = 2
+costs_action = false
+''')
+    spec = load_simulation(path)
+    assert spec.light_plan.costs_action is False
 
 
 def test_hp_mode_rolled_accepted(tmp_path):

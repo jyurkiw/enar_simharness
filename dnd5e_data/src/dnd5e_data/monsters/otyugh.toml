@@ -3,18 +3,30 @@
 # engine's real values, not the illustrative rewrite in design doc 01 section
 # 1.11).
 #
-# PHASE 3 SIMPLIFICATION: the old engine chose between three multiattack
-# patterns based on live grapple state — grab two different enemies with
-# tentacles; bite a captive + grab another; slam two captives with
-# tentacle_slam (dnd5e_combat/monsters/otyugh/__init__.py). Expression-driven
-# multiattack selection (`when = "count(enemies_grappled_by_self) == ..."`)
-# is Phase 4 (design doc 04), so this file has a single always-selected
-# option approximating the old engine's no-captives-yet default, constrained
-# to one target since Phase 3 can't split actions across targets within one
-# multiattack option. `tentacle_slam` is defined but unreachable until
-# Phase 4 adds the grapple-state-gated options from design doc 01 section
-# 1.11 (the full, non-simplified acid-test example) — see design doc 06's
-# Phase 3 completion notes for the parity impact of this simplification.
+# PHASE 4: full grapple-state-gated multiattack (design doc 01 section 1.11 /
+# design doc 04 section 2), replacing Phase 3's single always-selected
+# `grab_two` fallback: `count(enemies_grappled_by_self)` selects grab_two (0),
+# bite_and_grab (1), or slam_two (2+) exactly as
+# dnd5e_combat/monsters/otyugh/__init__.py's take_turn does.
+#
+# Targeting fidelity (found via otyugh_cr5_dps parity measurement, Task #47):
+# the old policy picks fresh tentacle targets with `ctx.choice` — a uniform
+# random draw from the reachable pool, not "always the nearest" — and `bite`
+# in the 1-grappled state always hits the existing captive, never a new
+# target. Reproduced via `[[behavior.targeting]] order = "random"` (the
+# default `nearest` was concentrating both grab_two tentacles, and
+# bite_and_grab's second tentacle, on whichever party member happened to
+# spawn closest) plus `tentacle`'s `target_filter` excluding whoever's
+# already grappled and `bite`'s `enemies_grappled_by_self` targeting.
+#
+# DELIBERATE, PRE-REGISTERED SCOPE CUT (parity escalation rule, design doc 06):
+# the old policy also has a tank/skirmisher pack-avoidance targeting rule
+# (avoid tagged targets when an ally already has the tank grappled) and
+# publishes `enemy_crit`/`slam_both_failed` round flags that life_cleric reacts
+# to — both only matter in multi-otyugh or life-cleric-party sims. Left out of
+# this shared creature file; `enemies_tagged`/`set_flag` are available if
+# measured parity on otyugh_cr5_x2 (Task #48) or a life_cleric sim needs them,
+# added there via `[overrides.otyugh]`, not baked into every solo sim.
 name = "otyugh"
 display_name = "Otyugh"
 
@@ -47,17 +59,27 @@ wisdom = 1
 darkvision = 120
 passive_perception = 11
 
+# Any creature with real (non-limited) darkvision ignores heavy obscurement
+# outright (dnd5e_combat.battlefield.Battlefield.obscurement_immune: "anything
+# with data['darkvision']") — matters once a darkness aura exists (Task #55's
+# shadow otyugh sims): a plain Otyugh lurking in the Shadow's own darkness
+# still sees out fine, even though it isn't the darkness's source.
+[traits.darkvision]
+effects = [ { effect = "darkvision_immunity" } ]
+
 [abilities.bite]
 kind = "attack"
 to_hit = 6
 damage = "2d8+3"
 damage_type = "piercing"
+targets = "enemies_grappled_by_self"   # only ever used in bite_and_grab: hits the captive
 
 [abilities.tentacle]
 kind = "attack"
 to_hit = 6
 damage = "2d8+3"
 damage_type = "piercing"
+target_filter = "not is_grappled_by(target, self)"   # a fresh target, never a current captive
 on_hit = [ { effect = "attach_condition", condition = "grappled", escape_dc = 13 } ]
 
 [abilities.tentacle_slam]
@@ -67,11 +89,26 @@ dc = 14
 damage = "3d8+3"
 damage_type = "bludgeoning"
 half_on_save = true
+targets = "enemies_grappled_by_self"
+max_targets = 2
 on_fail = [ { effect = "attach_condition", condition = "stunned" } ]
 
-[multiattack.grab_two]
+[multiattack.slam_two]                 # 2+ enemies grappled: slam them both
+actions = ["tentacle_slam"]
+when = "count(enemies_grappled_by_self) >= 2"
+priority = 30
+
+[multiattack.bite_and_grab]            # 1 grappled: bite the captive, grab another
+actions = ["bite", "tentacle"]
+when = "count(enemies_grappled_by_self) == 1"
+priority = 20
+
+[multiattack.grab_two]                 # none grappled: two tentacles, two targets
 actions = ["tentacle", "tentacle"]
-priority = 0
+priority = 0                           # no `when` = the fallback
 
 [behavior]
 tactic = "engage"
+
+[[behavior.targeting]]
+order = "random"   # ctx.choice in the old policy: uniform, not nearest-first

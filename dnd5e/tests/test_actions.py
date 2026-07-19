@@ -7,7 +7,8 @@ from dnd5e.actions import CombatContext, resolve_ability
 from dnd5e.battlefield import Battlefield
 from dnd5e.creature import ConditionInstance, Creature
 from dnd5e.dice import Resolver
-from dnd5e.statblock import Ability, EffectCall, Statblock, Stats
+from dnd5e.effects import EffectScope, apply_effect
+from dnd5e.statblock import Ability, ConditionDef, EffectCall, Reaction, Statblock, Stats
 
 
 class ScriptedDice:
@@ -226,6 +227,45 @@ def test_melee_attack_ignores_range_bands_when_in_reach(tmp_path):
     assert out.damage == 7
 
 
+# ---- attack(): reaction interception (design doc 04 section 4's ordering invariant) ----
+
+def test_attack_ally_targeted_reaction_redirects_before_the_roll(tmp_path):
+    """`ally_targeted_by_attack` fires and its `redirect_attack` completes
+    *before* advantage/disadvantage/AC are read for the roll — proven by
+    giving the redirect target a much higher AC than the original target: if
+    the roll read the original target's AC, an 18 would hit; it doesn't,
+    because the swap already happened before `resolver.attack` ran."""
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    a = make_creature("archer", "party", 0, 0)
+    b = make_creature("fighter", "monsters", 1, 0, ac=14)
+    protector_sb = Statblock(
+        name="protector", display_name="protector", classification={}, stats=make_stats(ac=99),
+        reactions={"intercept": Reaction(name="intercept", trigger="ally_targeted_by_attack",
+                                         effects=(EffectCall(effect="redirect_attack", args={"to": "self"}),),
+                                         uses_reaction=True)},
+    )
+    c = Creature(statblock=protector_sb, instance_name="protector", side="monsters")
+    c.place(2, 0)
+    ctx, _, _ = make_ctx(board, [12], [a, b, c])  # 12+6=18: would hit fighter's ac14, not protector's ac99
+    out = ctx.attack(a, b, bonus=6, damage="1d8+3")
+    assert out.hit is False
+    assert out.target is c
+    assert c.round_scratch.get("reaction_used") is True
+
+
+def test_attack_with_no_matching_reaction_is_unaffected(tmp_path):
+    """No candidate has a matching reaction: `_offer_pre_attack_reactions` is
+    a no-op, and the attack resolves against the original target exactly as
+    if reactions didn't exist."""
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    a = make_creature("fighter", "party", 0, 0)
+    b = make_creature("otyugh", "monsters", 1, 0)
+    ctx, _, _ = make_ctx(board, [10, 7], [a, b])
+    out = ctx.attack(a, b, bonus=5, damage="1d8+4")
+    assert out.hit is True
+    assert out.target is b
+
+
 # ---- saving_throw ---------------------------------------------------------------
 
 def test_saving_throw_uses_creature_save_mod(tmp_path):
@@ -395,6 +435,27 @@ def test_remove_condition_grappled_releases_the_grapple_graph(tmp_path):
     ctx.remove_condition(fighter, conditions.GRAPPLED)
     assert not fighter.has_condition(conditions.GRAPPLED)
     assert bf.grappled_by("fighter") is None
+
+
+def test_attach_condition_per_source_exclusive_moves_between_bearers(tmp_path):
+    """The Bruiser's Mark's RAW "only one creature marked at a time":
+    `exclusive = "per_source"` detaches the same source's existing instance
+    from whoever else holds it when it's attached to a new bearer."""
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    bruiser = make_creature("bruiser", "monsters", 0, 0)
+    fighter_a = make_creature("fighterA", "party", 1, 0)
+    fighter_b = make_creature("fighterB", "party", 2, 0)
+    ctx, _, _ = make_ctx(board, [], [bruiser, fighter_a, fighter_b])
+    ctx.condition_defs = {"marked": ConditionDef(name="marked", exclusive="per_source")}
+
+    apply_effect(EffectCall(effect="attach_condition", args={"condition": "marked"}),
+                EffectScope(ctx=ctx, source=bruiser, target=fighter_a))
+    assert fighter_a.has_condition("marked")
+
+    apply_effect(EffectCall(effect="attach_condition", args={"condition": "marked"}),
+                EffectScope(ctx=ctx, source=bruiser, target=fighter_b))
+    assert fighter_b.has_condition("marked")
+    assert not fighter_a.has_condition("marked")  # exclusivity moved it, didn't duplicate it
 
 
 # ---- resolve_ability ----------------------------------------------------------------

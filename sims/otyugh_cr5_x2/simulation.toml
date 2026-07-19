@@ -1,0 +1,96 @@
+# Two CR5 Otyughs vs the reusable level-5 "adventurers" party. Identical to
+# otyugh_cr5_dps except for a second otyugh instance and the party's
+# focus-fire target. Ported from dnd/otyugh/otyugh_cr5_x2/src/scenario.toml
+# (design doc 05's migration checklist row 3).
+#
+# `count = 2` on the [[combatants]] entry below auto-suffixes instance names
+# (otyugh_1/otyugh_2) — the old engine's ledger used otyugh_a/otyugh_b;
+# `scratch/check_otyugh_cr5_x2_parity.py` renames both that and the party's
+# short names before calling `simharness.stats.compare()` (same pattern as
+# otyugh_cr5_dps's parity script).
+#
+# `tags` on champion_fighter/thief_rogue below make `has_tag(...)` queries
+# meaningful — see design doc 05's migration-plan note that this sim was
+# expected to need a pack-rule targeting expression (an ally-otyugh already
+# grappling the tank should make a *different* otyugh avoid tank/skirmisher
+# targets and press the squishier back line). Not added to the shared
+# dnd5e_data/monsters/otyugh.toml (which otyugh_cr5_dps/_compare/_monk also
+# use) — applied via [overrides.otyugh] below instead.
+#
+# PARITY STATUS (measured Task #48, 10000 trials @ seed 20260701): FAIL,
+# documented, escape-hatch candidate per doc05's own prediction for this sim.
+# The pack-rule override below (`target_filter` on tentacle) was implemented
+# and loads/validates correctly, but moved the numbers by <2% — not the
+# dominant driver. `wiped_monsters` (party wipes both otyughs) is baseline
+# 0.29 vs. new 0.00; `down_otyugh_1`/`_2` are roughly half the baseline rate;
+# `dealt_thief_rogue`/`dealt_hunter_ranger` are 38-45% under baseline while
+# `taken_thief_rogue` is 126% over. The otyugh_cr5_dps overshoot in total
+# otyugh damage output (~54% over, root cause not isolated — see that sim's
+# own notes) compounds with two otyughs instead of one, and appears to swamp
+# everything else measured here, including thief_rogue's already-documented
+# missing Cunning Strike rider. Escalating further (the Python escape hatch,
+# design doc 04 section 5) would need to replace the otyugh's whole targeting/
+# movement resolution for this sim, which is a bigger change than a
+# `[overrides.otyugh]` expression tweak — left for a follow-up session rather
+# than guessed at further here.
+name = "otyugh_cr5_x2"
+description = "Two CR5 Otyughs vs the adventurers party"
+
+board = "lib:plain_room"
+
+[simulation]
+trials = 10000
+max_rounds = 3
+seed = 20260701
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+tags = ["tank"]
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+tags = ["skirmisher"]
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+count = 2
+
+# Pack-rule targeting (design doc 05's migration-plan note for this sim):
+# avoid the tank/skirmisher-tagged targets while an ally otyugh already has
+# the tank grappled, pressing the squishier back line instead — matching
+# dnd5e_combat/monsters/otyugh/__init__.py's `tank_locked_by_ally`/`soft`
+# pool logic. Applied via override (not baked into the shared otyugh.toml)
+# since it's only meaningful with 2+ otyughs on the same side.
+[overrides.otyugh]
+abilities.tentacle.target_filter = """\
+not is_grappled_by(target, self) and (\
+not (has_tag(target, 'tank') or has_tag(target, 'skirmisher')) or \
+not any(enemies_tagged('tank'), is_grappled(it) and not is_grappling(self, it))\
+)"""
+
+[environment]
+focus = "otyugh_1"
+
+[output]
+report = ["totals", "by_combatant"]

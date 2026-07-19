@@ -1,12 +1,21 @@
 # Life Domain Cleric, level 5. Ported from
-# dnd5e_combat/characters/life_cleric/defaults.toml. PHASE 3 SIMPLIFICATION:
-# the old engine's triage logic (heal a downed ally first, cast Bane round 1,
-# Bless round 2, then Sacred Flame — diverting to a heal after a party spike)
-# is entirely round/state-conditional Python policy — TODO(phase4): needs
-# `[[behavior.targeting]]`/conditional multiattack (`round() == 1`,
-# `any(allies, is_down(it))`, `has_flag(...)`) to express. This file always
-# casts Sacred Flame; `cure_wounds` is defined but not selected by any
-# multiattack option yet.
+# dnd5e_combat/characters/life_cleric/defaults.toml.
+#
+# PHASE 4: round-conditional opener — Bane (round 1), Bless if Bane didn't
+# stick (round 2), Sacred Flame otherwise — now expressed via `round()`/
+# `has_condition` `when` gates (design doc 04 section 2), matching
+# dnd5e_combat/monsters/../life_cleric/__init__.py's take_turn. Bane/Bless's
+# +-1d4 d20 dice are real now too (conditions.py's `d20_dice`, wired into
+# actions.py this phase).
+#
+# REMAINING DELIBERATE CUT: the old policy's top-of-turn triage ("if any ally
+# is at 0 HP, drop everything and Cure Wounds them") and its post-spike divert
+# ("after an enemy crit or a failed tentacle_slam save, heal instead of Sacred
+# Flame") both need functions this engine doesn't expose yet — `is_dead`
+# isn't in the closed function registry (needed to exclude the truly dead from
+# "heal the dying"), and the spike divert needs `set_flag`/`has_flag` (Task
+# #51, not built when this file was written). `cure_wounds` stays defined but
+# unreachable until one of those lands.
 name = "life_cleric"
 display_name = "Life Cleric"
 
@@ -40,6 +49,27 @@ damage_type = "radiant"
 [abilities.cure_wounds]
 kind = "heal"
 amount = "1d8+7"
+
+[abilities.bane]
+kind = "save"
+ability = "wisdom"
+dc = 14
+on_fail = [ { effect = "attach_condition", condition = "bane" } ]
+
+[abilities.bless]
+kind = "utility"
+targets = "allies"
+effects = [ { effect = "attach_condition", condition = "bless" } ]
+
+[multiattack.bane_opener]
+actions = ["bane"]
+when = "round() == 1"
+priority = 30
+
+[multiattack.bless_opener]                 # only if Bane's target made its save
+actions = ["bless"]
+when = "round() == 2 and not has_condition(nearest_enemy, 'bane')"
+priority = 20
 
 [multiattack.standard]
 actions = ["sacred_flame"]

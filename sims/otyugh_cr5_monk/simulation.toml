@@ -1,0 +1,111 @@
+# Party (standard vs. Ranger-swapped-for-Monk) x Otyugh count (1 vs 2) — four
+# variants total. Ported from dnd/otyugh/otyugh_cr5_monk's four scenario files
+# (scenario_standard_1x/standard_2x/monk_1x/monk_2x.toml) into one sweep sim
+# (design doc 05's migration checklist row 5). The old engine authored these
+# as four separate scenario files rather than a true 2x2 product, so this
+# uses one `[[sweep.axes]]` with all four explicit `combatants` lists baked
+# in (matching the old structure) rather than two independently-swept axes
+# (which would require the loader to merge two separate combatant lists —
+# more machinery than four explicit variants need).
+#
+# `environment.focus` is currently inert (no party member's
+# `[[behavior.targeting]]` uses `order = "focus"` yet — see behavior.py's
+# `_order_pool`), so it's left at a fixed "otyugh" label across all four
+# variants rather than varying it per-variant to match otyugh_1/otyugh_2.
+name = "otyugh_cr5_monk"
+description = "Standard vs Monk-swapped party against 1 or 2 CR5 Otyughs"
+
+board = "lib:plain_room"
+
+[simulation]
+trials = 10000
+max_rounds = 3
+seed = 20260701
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+
+[[sweep.axes]]
+target = "combatants"
+values = [
+    # standard_1x: standard party, 1 otyugh
+    [
+        { creature = "champion_fighter", side = "party", spawn = "party" },
+        { creature = "hunter_ranger", side = "party", spawn = "party" },
+        { creature = "thief_rogue", side = "party", spawn = "party" },
+        { creature = "life_cleric", side = "party", spawn = "party" },
+        { creature = "evoker_wizard", side = "party", spawn = "party" },
+        { creature = "otyugh", side = "monsters", spawn = "monsters" },
+    ],
+    # standard_2x: standard party, 2 otyughs
+    [
+        { creature = "champion_fighter", side = "party", spawn = "party" },
+        { creature = "hunter_ranger", side = "party", spawn = "party" },
+        { creature = "thief_rogue", side = "party", spawn = "party" },
+        { creature = "life_cleric", side = "party", spawn = "party" },
+        { creature = "evoker_wizard", side = "party", spawn = "party" },
+        { creature = "otyugh", side = "monsters", spawn = "monsters", count = 2 },
+    ],
+    # monk_1x: ranger -> monk, 1 otyugh
+    [
+        { creature = "champion_fighter", side = "party", spawn = "party" },
+        { creature = "open_hand_monk", side = "party", spawn = "party" },
+        { creature = "thief_rogue", side = "party", spawn = "party" },
+        { creature = "life_cleric", side = "party", spawn = "party" },
+        { creature = "evoker_wizard", side = "party", spawn = "party" },
+        { creature = "otyugh", side = "monsters", spawn = "monsters" },
+    ],
+    # monk_2x: ranger -> monk, 2 otyughs
+    [
+        { creature = "champion_fighter", side = "party", spawn = "party" },
+        { creature = "open_hand_monk", side = "party", spawn = "party" },
+        { creature = "thief_rogue", side = "party", spawn = "party" },
+        { creature = "life_cleric", side = "party", spawn = "party" },
+        { creature = "evoker_wizard", side = "party", spawn = "party" },
+        { creature = "otyugh", side = "monsters", spawn = "monsters", count = 2 },
+    ],
+]
+
+[sweep]
+columns = ["side_dealt_party", "side_dealt_monsters"]
+
+[environment]
+focus = "otyugh"
+
+[output]
+report = ["totals", "by_combatant"]
+
+# PARITY STATUS (measured Task #50, 10000 trials @ seed 20260701, all 4
+# variants): FAIL, documented — same systemic gap as otyugh_cr5_dps/_x2/
+# _compare (otyugh total damage output 12-171% over baseline depending on
+# variant; life_cleric/thief_rogue's remaining documented cuts). Confirms the
+# gap is consistent across party composition and otyugh count rather than
+# specific to any one sim; not re-investigated further here — see
+# otyugh_cr5_dps's notes for the root-cause status.

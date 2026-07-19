@@ -1,5 +1,12 @@
 """Capture a parity baseline from an OLD-engine (dnd5e_combat) sim.
 
+**ARCHIVED, NOT RUNNABLE as of Phase 6 (design/05-migration-plan.md):** `dnd5e_combat`
+and every old `dnd/*` sim project this script imported (via the old sim's own venv) were
+deleted as part of retiring the old engine. Every baseline this script could capture
+already has been — see `sims/*/baseline/{rows.json,meta.json}`, which is what actually
+matters going forward (design/07-known-issues.md's parity backlog reads from those, not
+by re-running this). Kept only as a record of exactly how those baselines were produced.
+
 Design ref: E:\\Repos\\simulations\\simharness_v2\\design\\06-implementation-guide.md, Phase 0.
 
 Every otyugh/board_demo sim's `main()` follows the identical pattern:

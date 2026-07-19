@@ -1,0 +1,103 @@
+# Board-based variant of the Shadow Otyugh tuning sim — same encounter as
+# otyugh_shadow_solo (Shadow Otyugh vs the beaumont_playtest party), but the
+# photophage darkness is modeled geometrically instead of as a blanket
+# Blinded: a `darkness` aura follows the otyugh (30 ft, wider than the
+# fighter's torch's 20 ft light, so the photophage dominates — a sight line
+# only opens once the torch is right up next to it), and the fighter's torch
+# is a static `light` aura from round 1 (no `light_plan` — it's a worn item,
+# not a scripted spell-cast). Ported from
+# dnd/otyugh/otyugh_shadow_board/src/scenario.toml (design doc 05's
+# migration checklist row 8) — this is otyugh_shadow_pair's exact setup minus
+# the second plain Otyugh and minus the CR7 stat retune (this scenario keeps
+# shadow_otyugh.toml's un-retuned CR5 baseline numbers unmodified).
+name = "otyugh_shadow_board"
+description = "Board-based solo CR7 Shadow Otyugh vs the beaumont_playtest party"
+
+board = "lib:arena"
+
+[simulation]
+trials = 10000
+max_rounds = 5
+seed = 20260701
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "shadow_otyugh"
+side = "monsters"
+start = [10, 14]
+
+[overrides.hunter_ranger]
+stats.health.average = 34
+stats.constitution = 10
+stats.saves.constitution = 0
+
+[overrides.thief_rogue]
+stats.health.average = 33
+stats.constitution = 12
+stats.saves.constitution = 1
+
+[overrides.life_cleric]
+stats.health.average = 33
+stats.constitution = 12
+stats.saves.constitution = 1
+
+[overrides.evoker_wizard]
+stats.health.average = 22
+stats.constitution = 10
+stats.saves.constitution = 0
+
+[[environment.obscurement]]
+kind = "darkness"
+follows = "shadow_otyugh"
+radius = 30
+
+[[environment.obscurement]]
+kind = "light"
+follows = "champion_fighter"
+radius = 20
+start_round = 1
+
+[environment]
+focus = "shadow_otyugh"
+
+[output]
+report = ["totals", "by_combatant"]
+
+# PARITY STATUS (measured Task #58, 10000 trials @ seed 20260701): FAIL,
+# documented. `retreated` rate matches well (0.96 vs 0.97); `killed_on_
+# retreat` absent (same documented cut as the other two shadow sims).
+# Everything else is the same unresolved otyugh-damage-overshoot pattern
+# flagged across every otyugh sim this phase, at its largest magnitude yet
+# (dealt_shadow_otyugh +142%, side_dealt_monsters +142%) — plausible given
+# this is the solo shadow otyugh's most turns-per-party-member exposure of
+# any of the three shadow sims (5 rounds, only one monster to spread the
+# party's attention and damage across) — plus thief_rogue's missing Cunning
+# Strike rider (poisoned_shadow_otyugh 0% vs. baseline's 95%). Not
+# re-investigated further here for the same reason as otyugh_shadow_pair:
+# the root cause is shared across every otyugh sim migrated this phase, not
+# specific to this one's geometry/darkness/light modeling (which runs
+# cleanly on inspection).

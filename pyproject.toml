@@ -9,4 +9,5 @@ members = [
     "../dnd_board",
     "dnd5e_data",
     "dnd5e",
-]    # dnd5e added in Phase 3
+    "dnd5e_behaviors",
+]    # dnd5e added in Phase 3; dnd5e_behaviors added in Phase 4 (escape-hatch classes)

@@ -1,0 +1,134 @@
+# Encounter experiment: does a normal CR5 Otyugh helping the CR7 Shadow
+# Otyugh turn a trivial fight into an attrition threat? Same board/photophage
+# model as otyugh_shadow_board, with a second (ordinary) Otyugh added. Ported
+# from dnd/otyugh/otyugh_shadow_pair/src/scenario.toml (design doc 05's
+# migration checklist row 7).
+#
+# Unlike otyugh_shadow_solo, this scenario's old form was already
+# board-based (`board = "arena"`) with a *real*, bounded-radius `darkness`
+# aura (not `magical_darkness` — deliberately: ordinary light SHOULD burn it
+# back, per `dnd_board.obscurement.ObscurementField.is_heavily_obscured`'s
+# "magical_darkness always obscures; plain darkness is cancelled where light
+# overlaps" rule) plus the fighter's own static torch (`light`, 20 ft,
+# always on from round 1 — a worn item, not a scripted spell-cast, so no
+# `light_plan` here at all). Both otyughs have `darkvision_immunity`
+# (otyugh.toml/shadow_otyugh.toml's `[traits.darkvision]`), so the ordinary
+# Otyugh lurks inside its ally's darkness seeing out fine, while the
+# non-immune party can't see in until the fighter's torch reaches it.
+#
+# `[overrides.shadow_otyugh]` applies this sim's own CR7 retune numbers
+# (152 HP, bigger bite/tentacle/slam dice) on top of shadow_otyugh.toml's
+# un-retuned CR5 placeholders — matching the old scenario's own `[stats.
+# shadow_otyugh]` tuning block. `otyugh` uses its shared dnd5e_data defaults
+# unmodified (this sim's baseline never retuned it).
+name = "otyugh_shadow_pair"
+description = "Shadow Otyugh + a plain Otyugh vs the beaumont_playtest party"
+
+board = "lib:arena"
+
+[simulation]
+trials = 10000
+max_rounds = 5
+seed = 20260701
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "shadow_otyugh"
+side = "monsters"
+start = [10, 14]
+
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+start = [10, 16]       # lurks inside the Shadow's darkness (darkvision sees out)
+
+[overrides.hunter_ranger]
+stats.health.average = 34
+stats.constitution = 10
+stats.saves.constitution = 0
+
+[overrides.thief_rogue]
+stats.health.average = 33
+stats.constitution = 12
+stats.saves.constitution = 1
+
+[overrides.life_cleric]
+stats.health.average = 33
+stats.constitution = 12
+stats.saves.constitution = 1
+
+[overrides.evoker_wizard]
+stats.health.average = 22
+stats.constitution = 10
+stats.saves.constitution = 0
+
+[overrides.shadow_otyugh]
+stats.health.average = 152
+abilities.bite.damage = "2d12+3"
+abilities.bite_open.damage = "2d12+3"
+abilities.tentacle.damage = "2d10+3"
+abilities.tentacle_open.damage = "2d10+3"
+# The old scenario's [stats.shadow_otyugh.actions.tentacle_slam] retune
+# (save_dc=15, damage="4d8+3") is deliberately NOT ported: tentacle_slam
+# isn't referenced by any multiattack option in shadow_otyugh.toml (see its
+# header note — genuinely unreachable once grappling always routes through
+# drag_and_bite instead), so retuning numbers nothing ever rolls has no
+# effect either way.
+
+[[environment.obscurement]]
+kind = "darkness"
+follows = "shadow_otyugh"
+radius = 30
+
+[[environment.obscurement]]
+kind = "light"
+follows = "champion_fighter"
+radius = 20
+start_round = 1
+
+[environment]
+focus = "shadow_otyugh"
+
+[output]
+report = ["totals", "by_combatant"]
+
+# PARITY STATUS (measured Task #57, 10000 trials @ seed 20260701): FAIL,
+# documented. `killed_on_retreat` absent (same documented cut as
+# otyugh_shadow_solo — no parting-shot mechanic). The gap here is
+# substantially larger than the solo sims (both monsters' total damage
+# output ~36-72% over baseline, party taking far more damage in turn) —
+# consistent with, and compounding, the same unresolved otyugh-damage-
+# overshoot pattern already flagged on otyugh_cr5_dps/_x2, now with TWO
+# otyughs over FIVE rounds instead of one over three (more turns for the
+# per-turn overshoot to accumulate — matches otyugh_cr5_dps -> _x2's own
+# scaling). `poisoned_otyugh`/`poisoned_shadow_otyugh` both 0% vs. baseline's
+# 39%/76% is the same missing thief_rogue Cunning Strike rider. Not
+# re-investigated further here — same accept-and-document call already made
+# repeatedly this phase; the underlying root cause (not this sim's own
+# geometry/darkness/light modeling, which runs cleanly and produces
+# plausible-looking numbers on inspection) is shared across every otyugh sim
+# migrated this phase and would need to be chased centrally, not per-sim.

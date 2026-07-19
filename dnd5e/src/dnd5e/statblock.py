@@ -3,27 +3,35 @@
 mutation of per-trial state lives in `creature.py`; everything here is
 immutable and shared read-only across every trial of a run.
 
-Phase 3 scope (design doc 06): `EffectCall`/`Trait`/`Reaction`/`Resource` are
-schema-complete (so `dnd5e_data`'s files can be authored fully forward), but
-`when`/`target_filter` (expressions, Phase 4), `[[behavior.targeting]]`
-(Phase 4), `behavior.custom` (the escape hatch, Phase 4), and `[conditions.*]`
-(custom conditions, Phase 5) are parsed as absent/rejected by the loader — see
-loader.py's phase-boundary checks. The fields exist here now so later phases
-don't need to change this module's shape, only the loader's validation.
+Phase 4 update: `MultiattackOption.when`, `Ability.target_filter`, and
+`TargetingRule.when` hold **compiled `expressions.Node` ASTs**, not raw
+strings — `loader.py` parses and validates them once at load time
+(`expressions.parse_and_validate`), so `behavior.py` never re-parses an
+expression on the hot path of evaluating it every turn.
+
+Phase 5 update: `[conditions.*]` (custom conditions, `ConditionDef` below) and
+`[reactions.*]` (`Reaction.when` now also a compiled `Node`, matching the
+others) are implemented — design doc 03 section 3 / doc 04 section 4.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .expressions import Node
 
 # Ability kinds (closed set, design doc 01 section 1.4).
 ABILITY_KINDS = frozenset({"attack", "save", "heal", "utility"})
 
-# Movement tactics implemented in Phase 3 (design doc 06); `hunt_light` and
+# Movement tactics implemented so far (design doc 06); `hunt_light` and
 # `guard` are named in the full design doc 01 vocabulary but not implemented
 # until later phases — the loader rejects them for now.
-PHASE3_TACTICS = frozenset({"engage", "kite", "hold"})
+KNOWN_TACTICS = frozenset({"engage", "kite", "hold"})
+
+# Targeting order modes (design doc 04 section 3).
+TARGETING_ORDERS = frozenset({"nearest", "random", "focus"})
 
 
 @dataclass(frozen=True)
@@ -63,7 +71,7 @@ class Ability:
 
     # targeting
     targets: Optional[str] = None
-    target_filter: Optional[str] = None
+    target_filter: Optional["Node"] = None
     max_targets: Optional[int] = None
 
     # heal
@@ -87,7 +95,7 @@ class Ability:
 class MultiattackOption:
     name: str
     actions: tuple[str, ...]
-    when: Optional[str] = None
+    when: Optional["Node"] = None
     priority: int = 0
 
 
@@ -102,11 +110,33 @@ class Trait:
 class Reaction:
     name: str
     trigger: str
-    when: Optional[str] = None
+    when: Optional["Node"] = None
     effects: tuple[EffectCall, ...] = ()
     uses_reaction: bool = False
     uses_bonus_action: bool = False
     priority: int = 0
+
+
+@dataclass(frozen=True)
+class ConditionDef:
+    """A `[conditions.<name>]` custom condition definition (design doc 03
+    section 3): mechanics live as data (a `grants` list of grant-context
+    effect calls, folded generically by `actions.py` — the engine never
+    tests condition names), not engine code. Distinct from `creature.
+    ConditionInstance` (the per-trial *attached* instance, which carries a
+    `source` and copies `expires`/`unless` from here at attach time) — this
+    is the immutable, shared definition every instance of the name refers
+    back to. Defined once per introducing creature file, but collected
+    workspace-wide (`system.py` scans every roster member's `conditions`
+    dict) since the condition may be *attached* to a creature whose own file
+    never defines it (e.g. the Bruiser's Mark, attached to party members)."""
+
+    name: str
+    grants: tuple[EffectCall, ...] = ()
+    exclusive: Optional[str] = None       # "per_source" | "per_target" | None
+    ends_with_source: bool = True
+    expires: Optional[str] = None         # a clock keyword (conditions.CLOCK_KEYWORDS), or None
+    unless: Optional[str] = None          # a registered predicate name (conditions.UNLESS_PREDICATES)
 
 
 @dataclass(frozen=True)
@@ -118,9 +148,21 @@ class Resource:
 
 
 @dataclass(frozen=True)
+class TargetingRule:
+    """One `[[behavior.targeting]]` entry (design doc 04 section 3). `when`
+    is None for the catch-all fallback rule (matches every pool member)."""
+
+    when: Optional["Node"] = None
+    priority: int = 0
+    order: str = "nearest"
+
+
+@dataclass(frozen=True)
 class Behavior:
     tactic: str = "engage"
     action_priority: tuple[str, ...] = ()
+    targeting: tuple[TargetingRule, ...] = ()
+    custom: Optional[str] = None  # "python:module.Class" escape hatch (design doc 04 section 5)
 
 
 @dataclass(frozen=True)
@@ -168,6 +210,7 @@ class Statblock:
     traits: dict = field(default_factory=dict)          # name -> Trait
     reactions: dict = field(default_factory=dict)       # name -> Reaction
     resources: dict = field(default_factory=dict)       # name -> Resource
+    conditions: dict = field(default_factory=dict)      # name -> ConditionDef
     behavior: Behavior = field(default_factory=Behavior)
 
     @property

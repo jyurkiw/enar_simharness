@@ -38,6 +38,7 @@ kind = "attack"
 to_hit = 7
 damage = "1d4+4"
 damage_type = "piercing"
+targets = "enemies"   # a mundane weapon attack doesn't need sight — see champion_fighter.toml
 
 [multiattack.standard]
 actions = ["dagger", "dagger"]

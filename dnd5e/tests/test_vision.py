@@ -1,4 +1,4 @@
-from dnd_board import load_board_toml
+from dnd_board import ObscurementField, Region, load_board_toml
 
 from dnd5e.vision import cover_ac_bonus, has_full_cover, line_of_sight
 
@@ -70,3 +70,14 @@ def test_has_full_cover_behind_wall(tmp_path):
 def test_has_full_cover_false_for_pillar_only(tmp_path):
     board = make_board(tmp_path)
     assert has_full_cover(board, (4, 0), (4, 2)) is False
+
+
+def test_line_of_sight_blocked_by_obscurement_between_endpoints(tmp_path):
+    board = make_board(tmp_path)
+    obsc = ObscurementField(cell_feet=5, regions=[Region(center=(3, 0), radius_ft=10, kind="darkness")])
+    assert line_of_sight(board, (0, 0), (6, 0), obsc) is False
+
+
+def test_line_of_sight_unaffected_when_no_obscurement_passed(tmp_path):
+    board = make_board(tmp_path)
+    assert line_of_sight(board, (0, 0), (6, 0)) is True

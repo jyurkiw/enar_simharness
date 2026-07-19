@@ -1,0 +1,122 @@
+# Solo Shadow Otyugh (CR7 retune candidate) vs the "beaumont_playtest" party
+# (the adventurers archetypes with HP/Con overrides pinned to the design
+# doc's tuning baseline — otyugh_variant.md, "HP/damage tuning baseline":
+# total 166 HP, lower Con saves than the standard party). Ported from
+# dnd/otyugh/otyugh_shadow_solo/src/scenario.toml (design doc 05's migration
+# checklist row 6).
+#
+# The old scenario was abstract (no board): photophage darkness blinded every
+# enemy unconditionally from combat start, and `light_plan` (the wizard
+# casting Light) cleared that Blinded condition directly — sufficient in the
+# old abstract engine, where `can_see` is trivially always True and Blinded
+# is the *only* thing gating vision.
+#
+# NOT modeled here: a geometric `[[environment.obscurement]]` blanket-radius
+# darkness aura was tried and reverted (Task #56) — two problems, not one.
+# First, mundane weapon attacks needed a `targets = "enemies"` fix (now
+# applied to champion_fighter/hunter_ranger/thief_rogue's weapons — RAW,
+# Blinded doesn't prevent attacking, just imposes disadvantage) but *spells*
+# correctly still gate on `can_see`, which is purely geometric in this
+# engine — and `light_plan` only ever clears the Blinded *condition*, never
+# touches obscurement geometry (matching the old engine's own `_produce_
+# light`, which never touched `self.field.obscurement.regions` either).
+# Second, and more fundamentally: this photophage is `magical_darkness`,
+# which `dnd_board.obscurement.ObscurementField.is_heavily_obscured` (by
+# design, matching 5e RAW) is explicitly *not* cancelled by an ordinary
+# `light` region — so even a geometric fix wouldn't let a mundane Light spell
+# burn it back. The abstract engine's blanket on-combat-start blind has no
+# clean geometric equivalent; `light_plan` is kept (the wizard still spends
+# round 1's action on it, an accurately-modeled cost) but the blindness
+# itself isn't. See otyugh_shadow_board/otyugh_shadow_pair for the sims where
+# this mechanic is modeled with a *real*, bounded-radius aura instead, where
+# it composes correctly (no light_plan there — a static torch aura instead).
+#
+# No "beaumont_playtest" creature file exists — its members are just the
+# standard archetypes with per-member `[overrides.*]` (hp / con score / con
+# save), applied directly here rather than inventing a duplicate party file
+# for stats that are 90% identical to "adventurers" (Task #59).
+name = "otyugh_shadow_solo"
+description = "Solo CR7 Shadow Otyugh vs the beaumont_playtest party"
+
+board = "lib:plain_room"
+
+[simulation]
+trials = 10000
+max_rounds = 3
+seed = 20260701
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "shadow_otyugh"
+side = "monsters"
+spawn = "monsters"
+
+[overrides.hunter_ranger]
+stats.health.average = 34
+stats.constitution = 10
+stats.saves.constitution = 0
+
+[overrides.thief_rogue]
+stats.health.average = 33
+stats.constitution = 12
+stats.saves.constitution = 1
+
+[overrides.life_cleric]
+stats.health.average = 33
+stats.constitution = 12
+stats.saves.constitution = 1
+
+[overrides.evoker_wizard]
+stats.health.average = 22
+stats.constitution = 10
+stats.saves.constitution = 0
+
+[environment.light_plan]
+source = "evoker_wizard"
+round = 1
+costs_action = true
+
+[environment]
+focus = "shadow_otyugh"
+
+[output]
+report = ["totals", "by_combatant"]
+
+# PARITY STATUS (measured Task #56, 10000 trials @ seed 20260701): FAIL,
+# documented. `retreated` rate matches closely (0.96 vs 0.94) — the bloodied-
+# retreat mechanic itself is solid. `killed_on_retreat` is absent entirely
+# (documented cut — needs the opportunity-attack/parting-shot mechanic, Phase
+# 5's reaction bus). The rest is the same residual pattern as every other
+# otyugh sim this phase: thief_rogue's missing Cunning Strike rider (dealt
+# ~35% under, `poisoned_shadow_otyugh`/`any_poisoned_monsters` 0% vs.
+# baseline's ~96% — the rider is what poisons the *monster*, not the
+# reverse) plus a general damage-distribution shift (side_dealt_party ~18%
+# under, hp_remaining_shadow_otyugh ~66% over — the otyugh ends healthier
+# than baseline) whose root cause traces to the same otyugh-targeting/damage-
+# output pattern already flagged as unresolved on otyugh_cr5_dps, now
+# compounded by this sim's own deliberate cut (the abstract blanket-blind
+# mechanic isn't modeled — see the header note above for why).

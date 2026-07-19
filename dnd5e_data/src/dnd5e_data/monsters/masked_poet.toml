@@ -1,0 +1,74 @@
+# Masked Poet, CR 3. Ported from dnd5e_combat/monsters/masked_poet/__init__.py
+# + defaults.toml, tuned to dnd/masks/src/scenario.toml's
+# `[stats.masked_poet]` overrides (ac/hp/save_dc/damage below are those
+# tuned values — see masked_bruiser.toml's header for why this file bakes
+# them in directly rather than defaults+override).
+#
+# The network's Generator: Scathing Insult forces a CHA save (DC 14); on a
+# failure the target takes 2d10 psychic and grants Advantage to its
+# attackers until the end of the Poet's next turn — `[conditions.insulted]`,
+# `expires = "end_of_source_next_turn"` matching that duration exactly
+# (design doc 03 section 3's clock). No weapon, no Multiattack — the most
+# fragile network node.
+#
+# Targeting: prefers an enemy within 30 ft of a Hector ally (so the Hector
+# can follow up) among the visible, in-range pool; `target_filter` enforces
+# Scathing Insult's own 60 ft range (a `kind = "save"` ability has no
+# built-in range gating the way `kind = "attack"` does via range_normal/
+# range_long — see actions.py's `attack()` vs `_resolve_save`). `tactic =
+# "kite"` (max range = the ability's own range_normal) stands in for the old
+# policy's narrower "step away only if an enemy has closed within 15 ft" —
+# kite re-maximizes distance from its *own target* every turn instead,
+# which is a looser approximation; flagged for Task #70's parity pass.
+name = "masked_poet"
+display_name = "Masked Poet"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 3
+
+[stats]
+strength = 10
+dexterity = 14
+constitution = 12
+intelligence = 10
+wisdom = 10
+charisma = 16
+ac = 13
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 55
+
+[stats.saves]
+dexterity = 2
+constitution = 1
+charisma = 3
+
+[conditions.insulted]
+grants = [ { effect = "grant_advantage_to_attackers" } ]
+expires = "end_of_source_next_turn"
+
+[abilities.scathing_insult]
+kind = "save"
+ability = "charisma"
+dc = 14
+damage = "2d10"
+damage_type = "psychic"
+half_on_save = true
+range_normal = 60
+target_filter = "distance(self, target) <= 60"
+on_fail = [ { effect = "attach_condition", condition = "insulted" } ]
+
+[multiattack.standard]
+actions = ["scathing_insult"]
+
+[behavior]
+tactic = "kite"
+
+[[behavior.targeting]]
+when = "any(allies_tagged('hector'), distance(it, target) <= 30)"
+order = "nearest"
+priority = 10

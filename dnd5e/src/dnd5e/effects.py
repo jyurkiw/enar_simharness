@@ -1,45 +1,66 @@
 """The effect-primitive registry (design doc 03 section 4) — closed vocabulary,
 validated at load time, dispatched at resolution time.
 
-**Phase 3 scope is intentionally a small subset** of doc 03's full 17-primitive
-table: only what board_demo's creatures and a Phase-3-simplified Otyugh
-actually use — `attach_condition`, `remove_condition`, `require_save`. Every
-one of them is an "action"-context effect (legal inside an ability's
-`on_hit`/`on_fail`/`on_crit`/`on_all_saved` list). "Grant"-context effects
-(`grant_advantage_against`, `impose_disadvantage_except_source`, ...), which
-only make sense inside a custom condition's `grants` list, have no members
-yet because custom conditions (`[conditions.*]`) are Phase 5. Growing this
-registry is a deliberate change: add the primitive, its dispatch function,
-and a test — never call an unregistered name silently.
+**Phase 3 scope was intentionally a small subset** of doc 03's full
+17-primitive table: `attach_condition`, `remove_condition`, `require_save`.
+Phase 4 added `set_flag` (the round/trial signal bag — design doc 04's
+`has_flag` function reads what this writes), `end_trial` (flee/retreat —
+finalize immediately, optionally merging extra outcome keys; the
+shadow-otyugh retreat's `force_trial_end` equivalent), and the three
+obscurement/vision trait effects (`emit_light`, `limited_darkvision`,
+`darkvision_immunity`).
+
+Phase 5 adds `redirect_attack`/`swap_positions` (reaction-context: retarget
+the pending attack / exchange board coordinates — design doc 04 section 4's
+ordering invariant, that these complete *before* the roll, is enforced by
+`actions.py`'s `attack`, not here) and `damage_rider` (extra dice on the
+triggering hit — the Masked Hector's advantage/mark riders). Every action
+effect call may now carry a `when` (compiled at load time like any other,
+evaluated here against the acting creature/target/event before dispatch —
+design doc 01's masked_bruiser example gates several effects this way) and a
+`target` override (`"self"` | `"target"` | `"event.<field>"`, resolved by
+`_resolve_ref` — most calls implicitly target `scope.target`, but a reaction
+effect often needs to address someone else, e.g. marking `event.attacker`).
+"Grant"-context effects (`grant_advantage_to_attackers`, `impose_disadvantage_
+except_source`, ...) are a *separate* registry, `conditions.GRANT_EFFECTS` —
+they're never dispatched via `apply_effect` (they're data, folded by
+`actions.attack`), only validated by loader.py against that registry.
+Growing this registry is a deliberate change: add the primitive, its dispatch
+function, and a test — never call an unregistered name silently.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from .statblock import EffectCall
 
 if TYPE_CHECKING:
     from .creature import Creature
 
-ACTION_EFFECTS = frozenset({"attach_condition", "remove_condition", "require_save"})
-# Grant-context effects only apply inside a condition's `grants` list or a
-# trait's `effects` — none exist until Phase 5's custom conditions.
-GRANT_EFFECTS: frozenset = frozenset()
+ACTION_EFFECTS = frozenset({
+    "attach_condition", "remove_condition", "require_save", "set_flag", "end_trial",
+    "emit_light", "limited_darkvision", "darkvision_immunity",
+    "redirect_attack", "swap_positions", "damage_rider",
+})
 
-ALL_EFFECTS = ACTION_EFFECTS | GRANT_EFFECTS
+ALL_EFFECTS = ACTION_EFFECTS
 
 
 @dataclass
 class EffectScope:
     """What an effect function needs to act: the resolution API (duck-typed
     here as `Any` to avoid a circular import with actions.py, which is the
-    only real implementation) plus the source and target creatures."""
+    only real implementation) plus the source and target creatures, and
+    (Phase 5) the triggering event's bindings — populated for reaction
+    effects (`event.attacker`/`event.target`/`event.ability`), empty
+    otherwise."""
 
     ctx: Any
     source: "Creature"
     target: "Creature"
+    event: dict = field(default_factory=dict)
 
 
 def validate_effect_name(name: str, *, where: str) -> None:
@@ -47,10 +68,49 @@ def validate_effect_name(name: str, *, where: str) -> None:
         raise ValueError(f"{where}: unknown effect {name!r}; known effects: {sorted(ALL_EFFECTS)}")
 
 
+def _resolve_ref(ref: str, scope: EffectScope) -> "Creature":
+    """Resolve an effect-call `target`/`to`/`with` reference: `"self"` (the
+    effect's source — the acting/reacting creature), `"target"` (the effect's
+    default target), or `"event.<field>"` (a triggering-event binding, e.g.
+    `event.attacker`). Not the full expression language — effects.py only
+    ever needs these three fixed forms (see loader.py's `_validate_target_
+    ref`, which enforces exactly this at load time)."""
+    if ref == "self":
+        return scope.source
+    if ref == "target":
+        return scope.target
+    if ref.startswith("event."):
+        return scope.event.get(ref[len("event."):])
+    raise ValueError(f"cannot resolve effect reference {ref!r}")  # pragma: no cover (validated at load)
+
+
+def _effect_when_scope(scope: EffectScope):
+    """Build a full `expressions.Scope` for an effect call's `when` (design
+    doc 01's masked_bruiser example gates several effects this way) — needs
+    the full query vocabulary (`has_tag`, `distance`, ...), which `EffectScope`
+    deliberately doesn't carry itself (it would need a circular import on
+    `behavior.py`, which itself imports `escape_hatch`, `expressions`, etc.).
+    Lazy import here instead; `behavior.py` never imports `effects.py`, so
+    this is one-directional, not a cycle."""
+    from .behavior import BehaviorContext, ConcreteScope
+    ctx = scope.ctx
+    behavior_ctx = BehaviorContext(battlefield=ctx.battlefield, round_index=ctx.round_index,
+                                   turn_order=ctx.turn_order, flags=ctx.flags, resolver=ctx.resolver)
+    return ConcreteScope(behavior_ctx, scope.source, target=scope.target, event=scope.event)
+
+
 def apply_effect(call: EffectCall, scope: EffectScope) -> None:
+    when = call.args.get("when")
+    if when is not None:
+        from . import expressions
+        if not expressions.evaluate(when, _effect_when_scope(scope)):
+            return
     fn = _DISPATCH.get(call.effect)
     if fn is None:
         raise ValueError(f"unknown effect {call.effect!r} (not caught at load time?)")
+    if "target" in call.args:
+        scope = EffectScope(ctx=scope.ctx, source=scope.source,
+                            target=_resolve_ref(call.args["target"], scope), event=scope.event)
     fn(call.args, scope)
 
 
@@ -60,8 +120,32 @@ def apply_effects(calls: tuple[EffectCall, ...], scope: EffectScope) -> None:
 
 
 def _attach_condition(args: dict, scope: EffectScope) -> None:
-    scope.ctx.apply_condition(scope.target, args["condition"], source=scope.source,
+    condition = args["condition"]
+    cdef = scope.ctx.condition_defs.get(condition)
+    # `exclusive = "per_source"` (design doc 03 section 3): attaching to a new
+    # bearer detaches this *same source's* instance from whoever else holds
+    # it — the Bruiser's Mark's RAW "only one creature marked at a time".
+    # `"per_target"` needs no extra handling: `Creature.add_condition` already
+    # no-ops a duplicate on the same target, which is all it RAW means (a
+    # target can't be double-marked, but different targets each hold their
+    # own instance independently).
+    if cdef is not None and cdef.exclusive == "per_source":
+        for other in scope.ctx.battlefield.creatures.values():
+            if other is scope.target:
+                continue
+            existing = other.condition(condition)
+            if existing is not None and existing.source == scope.source.instance_name:
+                other.remove_condition(condition)
+    scope.ctx.apply_condition(scope.target, condition, source=scope.source,
                               escape_dc=args.get("escape_dc"))
+    # Custom conditions carry a clock/unless predicate on their *definition*,
+    # copied onto the just-attached instance so system.py's clock-tick step
+    # never needs to re-look up the def.
+    if cdef is not None and (cdef.expires or cdef.unless):
+        instance = scope.target.condition(condition)
+        if instance is not None:
+            instance.expires = cdef.expires
+            instance.unless = cdef.unless
 
 
 def _remove_condition(args: dict, scope: EffectScope) -> None:
@@ -79,8 +163,66 @@ def _require_save(args: dict, scope: EffectScope) -> None:
         apply_effect(EffectCall.from_dict(raw), scope)
 
 
+def _set_flag(args: dict, scope: EffectScope) -> None:
+    scope.ctx.set_flag(args["flag"], scope=args.get("scope", "round"))
+
+
+def _end_trial(args: dict, scope: EffectScope) -> None:
+    scope.ctx.end_trial(outcome=args.get("outcome"))
+
+
+def _emit_light(args: dict, scope: EffectScope) -> None:
+    """Register `scope.target` as a light-emitting aura source, following it
+    around the board (design doc 03's effect table: "become a light source,
+    clears local obscurement blindness" — the clearing itself happens every
+    round via `system.py`'s obscurement sync once this aura is in place, not
+    here)."""
+    from .battlefield import Aura
+    scope.ctx.battlefield.auras.append(
+        Aura(source=scope.target.instance_name, kind="light",
+             radius_ft=args["radius"], start_round=args.get("start_round", 1)))
+
+
+def _limited_darkvision(args: dict, scope: EffectScope) -> None:
+    from .battlefield import LIMITED_DARKVISION_RANGE_FT
+    scope.target.trial_scratch["limited_darkvision_ft"] = args.get("range", LIMITED_DARKVISION_RANGE_FT)
+
+
+def _darkvision_immunity(args: dict, scope: EffectScope) -> None:
+    scope.target.trial_scratch["darkvision_immune"] = True
+
+
+def _redirect_attack(args: dict, scope: EffectScope) -> None:
+    """Reaction-only (design doc 04 section 4's ordering invariant):
+    `actions.attack` calls the reaction bus *before* any roll, then reads
+    `CombatContext`'s pending-redirect back — this just records the new
+    target, it doesn't touch the roll itself."""
+    scope.ctx.set_pending_redirect(_resolve_ref(args["to"], scope))
+
+
+def _swap_positions(args: dict, scope: EffectScope) -> None:
+    scope.ctx.swap_positions(scope.source, _resolve_ref(args["with"], scope))
+
+
+def _damage_rider(args: dict, scope: EffectScope) -> None:
+    """Extra dice on the triggering hit (the Masked Hector's advantage/mark
+    riders) — a second `deal()` call, not a mutation of the base hit's
+    already-dealt damage; crit-doubled the same way the base hit was, via
+    `scope.event["crit"]` (set by `actions._resolve_attack`)."""
+    amount = scope.ctx.roll(args["damage"], crit=bool(scope.event.get("crit")))
+    scope.ctx.deal(scope.source, scope.target, amount, args.get("name", "rider"), args.get("damage_type"))
+
+
 _DISPATCH: dict[str, Callable[[dict, EffectScope], None]] = {
     "attach_condition": _attach_condition,
     "remove_condition": _remove_condition,
     "require_save": _require_save,
+    "set_flag": _set_flag,
+    "end_trial": _end_trial,
+    "emit_light": _emit_light,
+    "limited_darkvision": _limited_darkvision,
+    "darkvision_immunity": _darkvision_immunity,
+    "redirect_attack": _redirect_attack,
+    "swap_positions": _swap_positions,
+    "damage_rider": _damage_rider,
 }

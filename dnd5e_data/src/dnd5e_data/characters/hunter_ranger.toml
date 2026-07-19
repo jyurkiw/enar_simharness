@@ -1,16 +1,23 @@
 # Hunter Ranger, level 5. Ported from
-# dnd5e_combat/characters/hunter_ranger/defaults.toml. PHASE 3
-# SIMPLIFICATION: the old engine switches to `shortsword` when grappled (and
-# fights with disadvantage against a different grappler), maintains Hunter's
-# Mark as a `damage_rider` on the marked enemy, adds Colossus Slayer once per
-# turn, and drops Hunter's Mark on a failed Concentration save when hit —
-# TODO(phase4/5): the grapple-conditional weapon swap needs
-# `[[behavior.targeting]]`/ability `target_filter`; the rider dice need
-# `damage_rider`; Concentration needs a `taking_damage` reaction (design doc
-# 04 section 4's trigger catalog already has it, just unused here). This file
-# always fires the longbow twice with no riders; `shortsword`,
-# `hunters_mark_die`, `colossus_slayer_die` are kept as unused data/abilities
-# for Phase 4/5 to wire up.
+# dnd5e_combat/characters/hunter_ranger/defaults.toml.
+#
+# PHASE 4: grapple-conditional weapon swap — longbow at range, shortsword (at
+# its own grappler specifically, via `target_filter`) when grappled — now
+# expressed via `is_grappled(self)`/`is_grappling(target, self)`, matching
+# dnd5e_combat/characters/hunter_ranger/__init__.py's take_turn.
+#
+# REMAINING DELIBERATE CUT: Hunter's Mark (rider damage on a marked enemy,
+# dropped on a failed Concentration save when hit) and Colossus Slayer
+# (once/turn rider) both need a `damage_rider` effect primitive this engine
+# doesn't have yet, plus (for the Mark) a `taking_damage` reaction (design doc
+# 04 section 4 lists the trigger, Phase 5 wires the bus) — `hunters_mark_die`/
+# `colossus_slayer_die` stay as unused data for whenever that lands.
+#
+# PHASE 4 FIX: both weapons get `targets = "enemies"` (skips the default
+# "visible enemies only" sight requirement) — mundane weapon attacks don't
+# need sight, RAW (see champion_fighter.toml's header note for the full
+# reasoning); grappling in particular is tactile, not visual, so the
+# grappler-targeting shortsword especially needs this.
 name = "hunter_ranger"
 display_name = "Hunter Ranger"
 
@@ -41,16 +48,25 @@ damage = "1d8+4"
 damage_type = "piercing"
 range_normal = 150
 range_long = 600
+targets = "enemies"
 
 [abilities.shortsword]
 kind = "attack"
 to_hit = 7
 damage = "1d6+4"
 damage_type = "piercing"
+targets = "enemies"
+target_filter = "is_grappling(target, self)"
 
-[multiattack.standard]
+[multiattack.ranged]
 actions = ["longbow", "longbow"]
-priority = 0
+when = "not is_grappled(self)"
+priority = 10
+
+[multiattack.melee]                    # forced to fight the grappler, per SRD
+actions = ["shortsword", "shortsword"]
+when = "is_grappled(self)"
+priority = 20
 
 [behavior]
 tactic = "kite"

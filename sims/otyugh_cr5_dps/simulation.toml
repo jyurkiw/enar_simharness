@@ -1,0 +1,89 @@
+# Single CR5 Otyugh vs the reusable level-5 "adventurers" party (champion
+# fighter, hunter ranger, thief rogue, life cleric, evoker wizard). Ported
+# from dnd/otyugh/otyugh_cr5_dps/src/scenario.toml (design doc 05's migration
+# checklist row 2) — the party/monster stats now live in dnd5e_data instead of
+# a copy-pasted tuning.py, resolved automatically (no [[combatants]] needs a
+# local `sources` entry). Board: the abstract-mode featureless room (design
+# doc 00 decision D5) with spawn blocks close enough that everyone reaches
+# melee range within round 1, matching the old engine's boardless abstract
+# mode.
+#
+# Baseline comparison note: the old engine's ledger columns use the party's
+# short in-scenario names (fighter/ranger/rogue/cleric/wizard); this engine's
+# instance names are the creature files' own canonical names
+# (champion_fighter/hunter_ranger/thief_rogue/life_cleric/evoker_wizard) per
+# design doc 01's "every creature file has a `name` field, used as its
+# identity" rule — no per-sim aliasing layer. `scratch/check_otyugh_cr5_dps_
+# parity.py` renames the baseline's columns to match before calling
+# `simharness.stats.compare()`.
+#
+# PARITY STATUS (measured Task #47, 10000 trials @ seed 20260701): PARTIAL,
+# documented — same discipline as Phase 3's Otyugh cut. Getting here required
+# upgrading three party archetypes beyond their Phase 3 simplifications
+# (life_cleric: round-conditional Bane/Bless/Sacred Flame opener; evoker_wizard:
+# round-1 Lightning Bolt; hunter_ranger: grapple-conditional weapon swap) and
+# wiring real Bane/Bless d20 dice into actions.py (conditions.py's `d20_dice`,
+# previously unwired — see those files' own comments) plus otyugh targeting
+# fixes (uniform-random target choice matching the old engine's `ctx.choice`,
+# `bite` retargeted to the existing captive, `tentacle` filtered off current
+# captives).
+#   PASS: every down_*/wiped_*/poisoned_* rate column except poisoned_otyugh.
+#   FAIL, close: side_dealt_party/taken_otyugh (~5.4% mean delta vs. the 3%
+#     tolerance — nearly there).
+#   FAIL, root cause identified but unresolved: side_dealt_monsters/dealt_otyugh
+#     (~54% OVER the baseline) — randomizing otyugh targeting (matching the old
+#     engine's `ctx.choice`) now lands more hits against the party's
+#     lower-AC members than the baseline shows; the exact remaining discrepancy
+#     (movement/reach pattern? pool composition?) wasn't isolated further.
+#   FAIL, pre-existing documented cut: dealt_thief_rogue (~25% under — no
+#     Cunning Strike rider) and poisoned_otyugh (0% vs. baseline's 92% — the
+#     same rider is what poisons the otyugh); dealt_life_cleric (still off —
+#     the triage/post-spike-heal branch needs `is_dead`/`set_flag`, neither
+#     built when this file was written).
+# Revisit if otyugh_cr5_x2/_compare/_monk's own parity checks point at the
+# same root causes (they share this party and this otyugh file).
+name = "otyugh_cr5_dps"
+description = "Otyugh CR5 DPS check vs the adventurers party"
+
+board = "lib:plain_room"
+
+[simulation]
+trials = 10000
+max_rounds = 3
+seed = 20260701
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+
+[environment]
+focus = "otyugh"
+
+[output]
+report = ["totals", "by_combatant"]

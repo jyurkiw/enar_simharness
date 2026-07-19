@@ -1,7 +1,7 @@
 import pytest
-from dnd_board import load_board_toml
+from dnd_board import ObscurementField, Region, load_board_toml
 
-from dnd5e.battlefield import Battlefield
+from dnd5e.battlefield import Aura, Battlefield
 from dnd5e.creature import Creature
 from dnd5e.statblock import Statblock, Stats
 
@@ -217,3 +217,117 @@ def test_grapple_target_not_duplicated_on_regrapple(board):
     bf.grapple("otyugh", "fighter")
     bf.grapple("otyugh", "fighter")  # re-grapple same target: no-op duplicate
     assert bf.grabbed_targets("otyugh") == ["fighter"]
+
+
+# ---- obscurement / auras (row y=0, clear of the fixture's wall at (2,2)) -----
+
+def test_can_see_blocked_when_target_is_heavily_obscured(board):
+    a = make_creature("a", "party", x=0, y=0)
+    b = make_creature("b", "monsters", x=5, y=0)
+    obsc = ObscurementField(cell_feet=5, regions=[Region(center=(5, 0), radius_ft=10, kind="darkness")])
+    bf = Battlefield([a, b], board=board, obscurement=obsc)
+    assert bf.can_see(a, b) is False
+
+
+def test_can_see_unblocked_outside_obscurement(board):
+    a = make_creature("a", "party", x=0, y=0)
+    b = make_creature("b", "monsters", x=5, y=0)
+    obsc = ObscurementField(cell_feet=5, regions=[])
+    bf = Battlefield([a, b], board=board, obscurement=obsc)
+    assert bf.can_see(a, b) is True
+
+
+def test_can_see_immune_observer_sees_through_own_darkness_aura(board):
+    a = make_creature("a", "party", x=0, y=0)
+    b = make_creature("b", "monsters", x=5, y=0)
+    obsc = ObscurementField(cell_feet=5, regions=[Region(center=(5, 0), radius_ft=30, kind="darkness")])
+    bf = Battlefield([a, b], board=board, obscurement=obsc,
+                     auras=[Aura(source="b", kind="darkness", radius_ft=30)])
+    # b is the darkness's own source -> immune -> sees a fine despite both
+    # cells being inside the darkness region.
+    assert bf.can_see(b, a) is True
+    # a is not immune -> blocked (b's cell is obscured).
+    assert bf.can_see(a, b) is False
+
+
+def test_can_see_limited_darkvision_caps_range(board):
+    a = make_creature("a", "party", x=0, y=0)
+    a.trial_scratch["limited_darkvision_ft"] = 30
+    near = make_creature("near", "monsters", x=5, y=0)   # 25 ft away
+    far = make_creature("far", "monsters", x=9, y=0)      # 45 ft away
+    obsc = ObscurementField(cell_feet=5, regions=[
+        Region(center=(0, 0), radius_ft=50, kind="darkness"),  # covers the whole row
+    ])
+    bf = Battlefield([a, near, far], board=board, obscurement=obsc)
+    assert bf.can_see(a, near) is True    # within the 30 ft darkvision cap
+    assert bf.can_see(a, far) is False    # beyond it
+
+
+def test_refresh_auras_follows_source_and_recenters(board):
+    otyugh = make_creature("otyugh", "monsters", x=2, y=0)
+    obsc = ObscurementField(cell_feet=5)
+    bf = Battlefield([otyugh], board=board, obscurement=obsc,
+                     auras=[Aura(source="otyugh", kind="darkness", radius_ft=30)])
+    bf.refresh_auras(round_index=1)
+    assert obsc.regions == [Region(center=(2, 0), radius_ft=30, kind="darkness")]
+
+    otyugh.x, otyugh.y = 4, 0
+    bf.refresh_auras(round_index=2)
+    assert obsc.regions == [Region(center=(4, 0), radius_ft=30, kind="darkness")]
+
+
+def test_refresh_auras_skips_before_start_round(board):
+    otyugh = make_creature("otyugh", "monsters", x=2, y=0)
+    obsc = ObscurementField(cell_feet=5)
+    bf = Battlefield([otyugh], board=board, obscurement=obsc,
+                     auras=[Aura(source="otyugh", kind="darkness", radius_ft=30, start_round=2)])
+    bf.refresh_auras(round_index=1)
+    assert obsc.regions == []
+    bf.refresh_auras(round_index=2)
+    assert len(obsc.regions) == 1
+
+
+def test_refresh_auras_skips_down_source(board):
+    otyugh = make_creature("otyugh", "monsters", x=2, y=0, hp=20)
+    otyugh.current_damage = 999  # down
+    obsc = ObscurementField(cell_feet=5)
+    bf = Battlefield([otyugh], board=board, obscurement=obsc,
+                     auras=[Aura(source="otyugh", kind="darkness", radius_ft=30)])
+    bf.refresh_auras(round_index=1)
+    assert obsc.regions == []
+
+
+def test_refresh_auras_keeps_static_regions_alongside_auras(board):
+    otyugh = make_creature("otyugh", "monsters", x=2, y=0)
+    static_region = Region(center=(8, 8), radius_ft=15, kind="fog")
+    obsc = ObscurementField(cell_feet=5, regions=[static_region])
+    bf = Battlefield([otyugh], board=board, obscurement=obsc,
+                     auras=[Aura(source="otyugh", kind="darkness", radius_ft=30)])
+    bf.refresh_auras(round_index=1)
+    assert static_region in obsc.regions
+    assert Region(center=(2, 0), radius_ft=30, kind="darkness") in obsc.regions
+
+
+def test_obscurement_immune_includes_darkness_aura_source_and_darkvision_trait(board):
+    a = make_creature("a", "party", x=0, y=0)
+    b = make_creature("b", "monsters", x=5, y=0)
+    b.trial_scratch["darkvision_immune"] = True
+    bf = Battlefield([a, b], board=board, obscurement=ObscurementField(cell_feet=5),
+                     auras=[Aura(source="a", kind="magical_darkness", radius_ft=30)])
+    assert bf.obscurement_immune() == {"a", "b"}
+
+
+def test_not_blinded_by_obscurement_also_includes_limited_darkvision(board):
+    a = make_creature("a", "party", x=0, y=0)
+    a.trial_scratch["limited_darkvision_ft"] = 30
+    bf = Battlefield([a], board=board, obscurement=ObscurementField(cell_feet=5))
+    assert bf.obscurement_immune() == set()
+    assert bf.not_blinded_by_obscurement() == {"a"}
+
+
+def test_no_obscurement_field_means_no_crash_and_full_visibility(board):
+    a = make_creature("a", "party", x=0, y=0)
+    b = make_creature("b", "monsters", x=5, y=0)
+    bf = Battlefield([a, b], board=board)  # obscurement=None (the default)
+    assert bf.can_see(a, b) is True
+    bf.refresh_auras(round_index=1)  # no-op, must not raise

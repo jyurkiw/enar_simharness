@@ -1,5 +1,11 @@
 """Capture parity baselines for the masks sim's 6 party x strategy variants.
 
+**ARCHIVED, NOT RUNNABLE as of Phase 6 (design/05-migration-plan.md):** `dnd5e_combat`
+and `dnd/masks` were deleted as part of retiring the old engine. All 6 masks baseline
+variants already captured — see `sims/masks/*/baseline/{rows.json,meta.json}`, which
+design/07-known-issues.md's parity backlog reads from (not by re-running this). Kept
+only as a record of exactly how those baselines were produced.
+
 Design ref: 06-implementation-guide.md Phase 0. masks/src/simulation.py's `run()`
 mutates cfg["encounter"]["party"] and cfg["encounter"]["focus"] per variant (on top
 of the standard apply_stats(monster, stats) merge every other sim does) - reproduced

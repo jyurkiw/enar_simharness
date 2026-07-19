@@ -1,0 +1,90 @@
+# Standard party vs vanguard party, both against a single CR5 Otyugh — same
+# seed/monster, so any difference is attributable to the party. Ported from
+# dnd/otyugh/otyugh_cr5_compare's two scenario files
+# (scenario_standard.toml/scenario_vanguard.toml) into one sim with a
+# `[[sweep.axes]]` over the whole `combatants` list (design doc 05's migration
+# checklist row 4) — replaces the old hand-rolled two-run comparison script.
+#
+# The base `[[combatants]]` below is the standard party (so `dnd5e-sim
+# validate`/a bare `dnd5e-sim run` still works standalone); the sweep axis
+# replaces it wholesale with either the same standard list or the vanguard
+# list. `scratch/check_otyugh_cr5_compare_parity.py` renames columns per
+# variant before calling `simharness.stats.compare()` (same pattern as
+# otyugh_cr5_dps/_x2's scripts).
+name = "otyugh_cr5_compare"
+description = "Standard party vs vanguard party against a single CR5 Otyugh"
+
+board = "lib:plain_room"
+
+[simulation]
+trials = 10000
+max_rounds = 3
+seed = 20260701
+
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "otyugh"
+side = "monsters"
+spawn = "monsters"
+
+[[sweep.axes]]
+target = "combatants"
+values = [
+    [
+        { creature = "champion_fighter", side = "party", spawn = "party" },
+        { creature = "hunter_ranger", side = "party", spawn = "party" },
+        { creature = "thief_rogue", side = "party", spawn = "party" },
+        { creature = "life_cleric", side = "party", spawn = "party" },
+        { creature = "evoker_wizard", side = "party", spawn = "party" },
+        { creature = "otyugh", side = "monsters", spawn = "monsters" },
+    ],
+    [
+        { creature = "berserker_barbarian", side = "party", spawn = "party" },
+        { creature = "devotion_paladin", side = "party", spawn = "party" },
+        { creature = "martial_arts_monk", side = "party", spawn = "party" },
+        { creature = "life_cleric", side = "party", spawn = "party" },
+        { creature = "evoker_wizard", side = "party", spawn = "party" },
+        { creature = "otyugh", side = "monsters", spawn = "monsters" },
+    ],
+]
+
+[sweep]
+columns = ["side_dealt_party", "side_dealt_monsters"]
+
+[environment]
+focus = "otyugh"
+
+[output]
+report = ["totals", "by_combatant"]
+
+# PARITY STATUS (measured Task #50, 10000 trials @ seed 20260701, both
+# variants): FAIL, documented — the same systemic gap already recorded on
+# otyugh_cr5_dps/_x2 (otyugh total damage output ~55-72% over baseline, root
+# cause not isolated; life_cleric/thief_rogue's remaining documented cuts)
+# shows up here for both the standard AND vanguard parties, at similar
+# magnitude. No new root cause found; not re-investigated further per the
+# same accept-and-document decision already made for otyugh_cr5_dps.
