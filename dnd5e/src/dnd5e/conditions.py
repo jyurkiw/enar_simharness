@@ -130,14 +130,16 @@ SKIPS_TURN = frozenset({STUNNED, PARALYZED, UNCONSCIOUS, PETRIFIED})
 # Grant-context effect names legal inside a `[conditions.*].grants` list or a
 # trait's `effects` (design doc 03 section 4's table) — validated by
 # loader.py, folded generically by `grants_for` below. `grant_advantage_
-# against`/`push` are registered (so a future creature can reference them
-# without a loader change) but have no fold logic yet — nothing in Phase 5's
-# actual scope (the masks network) uses them; only the two masks actually
-# exercise (`grant_advantage_to_attackers`, `impose_disadvantage_except_
-# source`) are wired into `actions.py`.
+# against` is registered (so a future creature can reference it without a
+# loader change) but has no fold logic yet — nothing in scope uses it. The
+# others ARE wired into `actions.py`'s `attack`: `grant_advantage_to_
+# attackers`/`impose_disadvantage_except_source` (masks), and `grant_self_
+# advantage` (Bug-A follow-up: the Berserker Barbarian's Reckless Attack —
+# advantage on the *bearer's own* attacks, folded on the attacker side).
 GRANT_EFFECTS = frozenset({
     "grant_advantage_to_attackers", "grant_advantage_against",
     "impose_disadvantage", "impose_disadvantage_except_source",
+    "grant_self_advantage",
 })
 
 # Closed clock keywords a `[conditions.*].expires` may reference (design doc

@@ -133,6 +133,35 @@ def test_attack_target_blinded_grants_attacker_advantage(tmp_path):
     assert out.hit is True  # 18 >= ac 14
 
 
+def test_grant_self_advantage_condition_gives_attacker_advantage(tmp_path):
+    """Reckless Attack (design doc 07, Bug A): a condition on the ATTACKER that
+    grants `grant_self_advantage` folds into advantage on its own rolls."""
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    a = make_creature("barbarian", "party", 0, 0)
+    b = make_creature("otyugh", "monsters", 1, 0)
+    ctx, _, _ = make_ctx(board, [5, 18, 7], [a, b])  # advantage: rolls 5 and 18, keeps 18
+    ctx.condition_defs = {"reckless": ConditionDef(
+        name="reckless", grants=(EffectCall(effect="grant_self_advantage", args={}),))}
+    a.add_condition(ConditionInstance(name="reckless", source="barbarian"))
+    out = ctx.attack(a, b, bonus=0, damage="1d8+4")
+    assert out.hit is True  # 18 >= ac 14: advantage kept the high roll
+
+
+def test_attach_condition_with_expires_sets_the_instance_clock(tmp_path):
+    """Timed RAW condition (design doc 07, Bug A): the Monk's Stunning Strike
+    attaches `stunned` with an explicit `expires` clock even though `stunned`
+    has no ConditionDef of its own."""
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    a = make_creature("monk", "party", 0, 0)
+    b = make_creature("otyugh", "monsters", 1, 0)
+    ctx, _, _ = make_ctx(board, [], [a, b])
+    apply_effect(EffectCall(effect="attach_condition",
+                            args={"condition": "stunned", "expires": "start_of_source_next_turn"}),
+                 EffectScope(ctx=ctx, source=a, target=b))
+    inst = b.condition("stunned")
+    assert inst is not None and inst.expires == "start_of_source_next_turn"
+
+
 def test_attack_attacker_blinded_imposes_disadvantage(tmp_path):
     board = make_board(tmp_path, OPEN_BOARD, "open")
     a = make_creature("fighter", "party", 0, 0)

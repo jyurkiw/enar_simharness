@@ -1,13 +1,23 @@
 # Way of the Open Hand Monk, level 5. Ported from
-# dnd5e_combat/characters/open_hand_monk/defaults.toml. PHASE 3
-# SIMPLIFICATION: the old engine spends 1 ki for Flurry of Blows (two bonus
-# attacks) whenever ki is available, and attempts Stunning Strike on the
-# first hit — TODO(phase4): Flurry needs conditional multiattack
-# (`resource_available("ki")`, matching the "abilities with costs make the
-# option ineligible" rule in design doc 04 section 2); Stunning Strike needs
-# `require_save` wired into `on_hit`. This file always makes 2 unarmed
-# strikes (Extra Attack only, no Flurry, no Stunning Strike).
-# `resources.ki` is kept for Phase 4/5 to spend.
+# dnd5e_combat/characters/open_hand_monk/defaults.toml.
+#
+# BUG-A REBUILD (design doc 07): the Phase 3 flat 2-attack build was the
+# single largest party-strength gap (dealt -43%) behind the monk-party sim's
+# monster-damage overshoot. The old engine spent 1 ki for Flurry of Blows
+# every turn while ki lasted (5 ki > any 3-round fight), giving 4 attacks/turn
+# (2 Extra Attack + 2 Flurry). Restored as a 4-attack `flurry` multiattack
+# gated on `resource_available('ki')`, with a 3-attack `no_ki` fallback (2
+# Extra + the Martial Arts bonus). NOTE: ki is never actually decremented
+# (there is no `spend_resource` effect), so in practice `flurry` always wins —
+# which is exactly the old behavior for a fight this short; the gate + fallback
+# encode the intent for whenever ki-spending lands.
+#   * Stunning Strike — a CON save (DC 14 = 8 + prof 3 + WIS 3) on the first hit
+#     each turn; on a failure the otyugh is Stunned until the start of the
+#     monk's next turn (`attach_condition ... expires =
+#     "start_of_source_next_turn"`), so it skips a turn (conditions.SKIPS_TURN).
+#     This is the main lever that kept the otyugh's damage low in the monk-party
+#     baseline. Once-per-turn via `turn_marked` (no ki spend needed: a 3-round
+#     fight is ~3 attempts, well under the 5 ki pool).
 name = "open_hand_monk"
 display_name = "Open Hand Monk"
 
@@ -41,9 +51,18 @@ kind = "attack"
 to_hit = 7
 damage = "1d6+4"
 damage_type = "bludgeoning"
+on_hit = [
+  { effect = "require_save", ability = "constitution", dc = 14, on_fail = [ { effect = "attach_condition", condition = "stunned", expires = "start_of_source_next_turn" } ], when = "not turn_marked('stun')" },
+  { effect = "mark_turn", key = "stun", when = "not turn_marked('stun')" },
+]
 
-[multiattack.standard]
-actions = ["unarmed", "unarmed"]
+[multiattack.flurry]                # 2 Extra Attack + 2 Flurry of Blows (1 ki)
+actions = ["unarmed", "unarmed", "unarmed", "unarmed"]
+when = "resource_available('ki')"
+priority = 10
+
+[multiattack.no_ki]                 # 2 Extra Attack + 1 Martial Arts bonus
+actions = ["unarmed", "unarmed", "unarmed"]
 priority = 0
 
 [behavior]

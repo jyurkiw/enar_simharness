@@ -106,6 +106,10 @@ def _validate_effect_args(call: EffectCall, *, where: str, known_conditions: fro
                 f"{where}: attach_condition condition {condition!r} is not a RAW condition "
                 f"or one this file defines under [conditions.*]; known: {sorted(allowed)}"
             )
+        if "expires" in call.args and not conditions_module.is_known_clock(call.args["expires"]):
+            raise ValueError(
+                f"{where}.expires: unknown clock {call.args['expires']!r}; "
+                f"known: {sorted(conditions_module.CLOCK_KEYWORDS)} or 'rounds:<n>'")
     elif call.effect == "require_save":
         require_keys(call.args, ["ability", "dc"], where=where)
         for key in ("on_fail", "on_success"):

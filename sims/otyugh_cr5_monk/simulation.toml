@@ -102,10 +102,13 @@ focus = "otyugh"
 [output]
 report = ["totals", "by_combatant"]
 
-# PARITY STATUS (measured Task #50, 10000 trials @ seed 20260701, all 4
-# variants): FAIL, documented — same systemic gap as otyugh_cr5_dps/_x2/
-# _compare (otyugh total damage output 12-171% over baseline depending on
-# variant; life_cleric/thief_rogue's remaining documented cuts). Confirms the
-# gap is consistent across party composition and otyugh count rather than
-# specific to any one sim; not re-investigated further here — see
-# otyugh_cr5_dps's notes for the root-cause status.
+# PARITY STATUS (re-measured 2026-07 Bug-A follow-up, 10000 trials @ seed
+# 20260701): the former monster-damage overshoot is FIXED for the single-otyugh
+# variants — it was the party missing class features, incl. the open_hand_monk
+# (Flurry of Blows + Stunning Strike). See design/07-known-issues.md Bug A.
+#   standard_1x: side_dealt_monsters ~-6% (was ~+12%).
+#   monk_1x:     side_dealt_monsters ~+12% (was ~+73%).
+#   monk_2x:     side_dealt_monsters ~-7% (was ~+16%).
+#   standard_2x: side_dealt_monsters ~-26% — the ranger kites too safely on the
+#     board in the longer 2-otyugh fight (keeps Hunter's Mark up); an inherent
+#     board-vs-abstract difference, accepted (see 07 Bug A + otyugh_cr5_x2).

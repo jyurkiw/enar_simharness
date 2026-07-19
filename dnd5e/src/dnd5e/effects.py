@@ -146,14 +146,19 @@ def _attach_condition(args: dict, scope: EffectScope) -> None:
                 other.remove_condition(condition)
     scope.ctx.apply_condition(scope.target, condition, source=scope.source,
                               escape_dc=args.get("escape_dc"))
-    # Custom conditions carry a clock/unless predicate on their *definition*,
-    # copied onto the just-attached instance so system.py's clock-tick step
-    # never needs to re-look up the def.
-    if cdef is not None and (cdef.expires or cdef.unless):
+    # Clock/unless predicate come from the condition's *definition* (custom
+    # conditions), OR from an explicit `expires` on the effect call itself — the
+    # latter lets a RAW condition be attached with a duration (the Monk's
+    # Stunning Strike attaches `stunned` with `expires =
+    # "start_of_source_next_turn"`, which has no ConditionDef of its own). The
+    # call's `expires` wins if both are present.
+    expires = args.get("expires") or (cdef.expires if cdef is not None else None)
+    unless = cdef.unless if cdef is not None else None
+    if expires or unless:
         instance = scope.target.condition(condition)
         if instance is not None:
-            instance.expires = cdef.expires
-            instance.unless = cdef.unless
+            instance.expires = expires
+            instance.unless = unless
 
 
 def _remove_condition(args: dict, scope: EffectScope) -> None:

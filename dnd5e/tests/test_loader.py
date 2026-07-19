@@ -289,6 +289,20 @@ def test_effect_call_target_ref_invalid_raises(tmp_path):
         load_creature(write(tmp_path, "x", body))
 
 
+def test_attach_condition_accepts_expires_clock(tmp_path):
+    body = (f'name = "x"\n{MINIMAL_STATS}\n[abilities.strike]\nkind = "attack"\nto_hit=5\ndamage="1d6"\n'
+            'on_hit = [ { effect = "attach_condition", condition = "stunned", expires = "start_of_source_next_turn" } ]\n')
+    sb = load_creature(write(tmp_path, "x", body))
+    assert sb.abilities["strike"].on_hit[0].args["expires"] == "start_of_source_next_turn"
+
+
+def test_attach_condition_rejects_unknown_expires_clock(tmp_path):
+    body = (f'name = "x"\n{MINIMAL_STATS}\n[abilities.strike]\nkind = "attack"\nto_hit=5\ndamage="1d6"\n'
+            'on_hit = [ { effect = "attach_condition", condition = "stunned", expires = "someday" } ]\n')
+    with pytest.raises(ValueError, match="unknown clock"):
+        load_creature(write(tmp_path, "x", body))
+
+
 def test_reduce_damage_requires_factor(tmp_path):
     body = (f'name = "x"\n{MINIMAL_STATS}\n[reactions.dodge]\ntrigger = "taking_damage"\n'
             'effects = [ { effect = "reduce_damage" } ]\n')

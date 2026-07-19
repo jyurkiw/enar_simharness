@@ -81,10 +81,13 @@ focus = "otyugh"
 [output]
 report = ["totals", "by_combatant"]
 
-# PARITY STATUS (measured Task #50, 10000 trials @ seed 20260701, both
-# variants): FAIL, documented — the same systemic gap already recorded on
-# otyugh_cr5_dps/_x2 (otyugh total damage output ~55-72% over baseline, root
-# cause not isolated; life_cleric/thief_rogue's remaining documented cuts)
-# shows up here for both the standard AND vanguard parties, at similar
-# magnitude. No new root cause found; not re-investigated further per the
-# same accept-and-document decision already made for otyugh_cr5_dps.
+# PARITY STATUS (re-measured 2026-07 Bug-A follow-up, 10000 trials @ seed
+# 20260701): the former monster-damage overshoot is FIXED for both variants —
+# it was the party missing class features (see design/07-known-issues.md Bug A).
+# Standard party rebuilt (rogue Sneak Attack/Uncanny Dodge, ranger Hunter's
+# Mark/Colossus Slayer); vanguard party rebuilt (barbarian Rage/Reckless,
+# paladin Divine-Smite-on-crit, monk Stunning Strike). Result:
+#   standard variant: side_dealt_monsters ~-6% (was ~+55%).
+#   vanguard variant: side_dealt_monsters ~+3% (was ~+72%).
+# Residual per-member `dealt_*` deltas are redistribution (a faster kill leaves
+# later-initiative members fewer non-overkill hits), not feature gaps.

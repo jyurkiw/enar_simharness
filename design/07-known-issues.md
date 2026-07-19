@@ -41,18 +41,37 @@ effect + `turn_marked(key)` predicate (once-per-turn riders like Sneak Attack); 
 Concentration pattern (a `taking_damage` reaction doing a CON save that drops a
 self-condition gating a rider — Hunter's Mark).
 
-**What's left (deliberately not done — same root cause, different members):**
-- **Other parties still overshoot** because *their* members are missing features:
-  `otyugh_cr5_compare/vanguard` (+72%) and `otyugh_cr5_monk/monk_*` (+73%/+16%) need the
-  same rebuild for the barbarian (Rage/Reckless), paladin (Divine Smite), and monk (Flurry
-  of Blows / Martial Arts). Identical technique, now-existing tools — mostly TOML.
-- **Multi-otyugh standard sims now *under*shoot** (`otyugh_cr5_x2`/`_monk standard_2x`,
-  monster damage ~−25%): in the longer 2-otyugh fight the ranger *kites too safely on the
-  board* (takes 10.4 dmg vs the abstract baseline's 12.5), so it rarely loses Concentration
-  and keeps Hunter's Mark up the whole fight, dealing ~+31%. This is an **inherent
-  board-vs-abstract difference** (the abstract old engine had no kiting), not a distortable
-  bug — the Concentration mechanic is correct and does fire; the board is simply safer.
-  Left as an accepted model difference.
+**Now also fixed — the vanguard and monk parties (2026-07, same follow-up):** the other
+two parties overshot for the same reason (their own members missing features), rebuilt the
+same way:
+- **berserker_barbarian**: Rage (+2 dmg baked in; physical resistance via a `taking_damage`
+  + `reduce_damage` reaction) and Reckless Attack (a `reckless` self-condition granting the
+  new `grant_self_advantage` fold + `grant_advantage_to_attackers`). dealt −22% → −2%.
+- **devotion_paladin**: Divine Smite on crit (`on_crit` `damage_rider` 2d8 → 4d8), matching
+  the old crit-only behavior.
+- **open_hand_monk**: Flurry of Blows (4-attack multiattack gated on `resource_available('ki')`)
+  and Stunning Strike (CON save on the first hit each turn → `stunned` with `expires =
+  "start_of_source_next_turn"`, so the otyugh skips a turn). dealt −43% → −22% (rest is
+  redistribution).
+- **martial_arts_monk**: round-1 Stunning Strike (offense was already on-baseline).
+
+Result: `otyugh_cr5_compare/vanguard` +72% → **+3%**; `otyugh_cr5_monk/monk_1x` +73% → **+12%**,
+`monk_2x` +16% → **−7%**. Two more reusable primitives (unit-tested): the `grant_self_advantage`
+grant fold (Reckless), and an explicit `expires` clock on `attach_condition` (a RAW condition
+attached with a duration — Stunning Strike's timed stun). Great Weapon Master crit-chains, GWF
+rerolls, and ki-spend depletion remain cut (small, within tolerance for ≤3-round fights).
+
+**What's genuinely left (NOT a party-feature gap — different root causes):**
+- **Multi-otyugh standard sims *under*shoot** (`otyugh_cr5_x2`/`_monk standard_2x`, monster
+  damage ~−25%): in the longer 2-otyugh fight the ranger *kites too safely on the board*
+  (takes 10.4 dmg vs the abstract baseline's 12.5), rarely loses Concentration, keeps Hunter's
+  Mark up, and deals ~+31%. An **inherent board-vs-abstract difference** (the abstract old
+  engine had no kiting) — not distortable without unfaithfully nerfing the ranger. Accepted.
+- **Shadow sims** (`otyugh_shadow_solo/pair/board`: −36%/+10%/+62%) — all improved from the
+  party rebuild (board was +142% pre-rebuild) but remain out of tolerance because of the
+  **shadow otyugh's own darkness/blindness dynamics** (the party fights blinded → disadvantage,
+  so the shadow otyugh's survival/damage interacts differently than a plain otyugh's). A
+  separate investigation, starting at the obscurement/vision interaction, not the party TOMLs.
 - `poisoned_otyugh` still undershoots (~0.48 vs baseline 0.92) — see Bug B.
 
 ---

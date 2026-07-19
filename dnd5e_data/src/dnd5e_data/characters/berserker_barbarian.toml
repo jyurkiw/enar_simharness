@@ -1,16 +1,27 @@
 # Path of the Berserker Barbarian, level 5. Ported from
-# dnd5e_combat/characters/berserker_barbarian/defaults.toml. PHASE 3
-# SIMPLIFICATION: the old engine's Reckless Attack (advantage both ways),
-# Great Weapon Master (+proficiency on one hit, bonus attack after a crit),
-# the dynamic 3-4 attack chain, and Rage's physical-damage resistance are all
-# Python-policy-only and not representable by v1's declarative vocabulary or
-# effect-primitive registry — TODO(phase4/5): Reckless Attack needs a
-# self-applied condition granting both `grant_advantage_to_attackers` and an
-# attack-roll advantage grant (new primitives); GWM's crit-chain needs
-# conditional multiattack selection; Rage resistance needs a `reduce_damage`
-# primitive (flagged in design doc 04 section 4 for the Rogue's Uncanny
-# Dodge, same gap). This file uses a flat 3-attack multiattack (the 2 Extra
-# Attack + 1 Frenzy baseline, no crit-chained 4th) with none of those riders.
+# dnd5e_combat/characters/berserker_barbarian/defaults.toml.
+#
+# BUG-A REBUILD (design doc 07): the Phase 3 flat 3-attack build with no riders
+# was one of the party-strength gaps behind the vanguard sims' monster-damage
+# overshoot. Restored (Rage is always up in these fights — bonus action turn 1,
+# lasts the encounter):
+#   * Rage damage — +2 per melee STR hit, baked into the greataxe code
+#     (1d12+6 -> 1d12+8) since it's always on.
+#   * Rage resistance — halve incoming physical damage, via a `taking_damage`
+#     reaction with `reduce_damage factor=0.5` and `uses_reaction=false` (a
+#     resistance is not the creature's reaction and applies to EVERY hit, not
+#     once per round). The otyugh deals only physical, so a blanket halving is
+#     exact here; it does not fire on the save-based tentacle_slam (taking_
+#     damage is published for attacks only) — a small documented gap.
+#   * Reckless Attack — a `reckless` self-condition (applied at setup by the
+#     trait below) granting `grant_self_advantage` (advantage on the barbarian's
+#     own attacks — the new fold in actions.attack) and `grant_advantage_to_
+#     attackers` (attacks against it have advantage), matching Reckless's
+#     both-ways rule. The extra incoming hits are what the Rage resistance above
+#     pays for.
+# STILL CUT (small, documented): Great Weapon Master (+prof on one hit, a
+# crit-chained bonus attack) — needs a reroll/crit-chain mechanic not built;
+# left out, its absence is within tolerance once the above are in.
 name = "berserker_barbarian"
 display_name = "Berserker Barbarian"
 
@@ -35,10 +46,23 @@ average = 45
 [stats.saves]
 constitution = 3
 
+# Reckless Attack's both-ways advantage marker (no expiry — the berserker
+# attacks recklessly every turn; applied at setup, never removed).
+[conditions.reckless]
+grants = [ { effect = "grant_self_advantage" }, { effect = "grant_advantage_to_attackers" } ]
+
+[traits.rage_and_reckless]
+effects = [ { effect = "attach_condition", condition = "reckless" } ]
+
+# Rage resistance: halve every incoming (physical) hit. Not a spent reaction.
+[reactions.rage_resistance]
+trigger = "taking_damage"
+effects = [ { effect = "reduce_damage", factor = 0.5 } ]
+
 [abilities.greataxe]
 kind = "attack"
 to_hit = 7
-damage = "1d12+6"
+damage = "1d12+8"      # 1d12+6 weapon + 2 Rage damage (always on)
 damage_type = "slashing"
 
 [multiattack.standard]

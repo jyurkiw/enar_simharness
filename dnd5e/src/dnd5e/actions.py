@@ -162,6 +162,10 @@ class CombatContext:
             disadvantage = True
         if conditions.grants_for(target, "grant_advantage_to_attackers", condition_defs=self.condition_defs):
             advantage = True
+        # A condition on the attacker can hand it advantage on its own attacks
+        # (the Barbarian's Reckless Attack).
+        if conditions.grants_for(attacker, "grant_self_advantage", condition_defs=self.condition_defs):
+            advantage = True
         if conditions.grants_for(attacker, "impose_disadvantage", condition_defs=self.condition_defs):
             disadvantage = True
         # Target-conditional (can't be a blanket condition check): the
