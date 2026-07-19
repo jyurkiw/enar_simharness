@@ -39,6 +39,16 @@ class FakeCtx:
     def deal(self, source, target, amount, name, damage_type=None):
         self.calls.append(("deal", source, target, amount, name, damage_type))
 
+    def reduce_pending_damage(self, factor):
+        self.calls.append(("reduce_pending_damage", factor))
+
+
+class _Creature:
+    """Minimal stand-in with a turn_scratch dict for mark_turn tests."""
+    def __init__(self, name):
+        self.instance_name = name
+        self.turn_scratch = {}
+
 
 def test_validate_effect_name_accepts_known():
     validate_effect_name("attach_condition", where="x")
@@ -82,6 +92,20 @@ def test_damage_rider_rolls_and_deals_separately_from_the_base_hit():
     scope = EffectScope(ctx=ctx, source="hector", target="fighter", event={"crit": True})
     apply_effect(EffectCall(effect="damage_rider", args={"damage": "2d6", "name": "mark_rider"}), scope)
     assert ctx.calls == [("roll", "2d6", True), ("deal", "hector", "fighter", 99, "mark_rider", None)]
+
+
+def test_reduce_damage_multiplies_pending_reduction_by_factor():
+    ctx = FakeCtx()
+    scope = EffectScope(ctx=ctx, source="rogue", target="rogue")
+    apply_effect(EffectCall(effect="reduce_damage", args={"factor": 0.5}), scope)
+    assert ctx.calls == [("reduce_pending_damage", 0.5)]
+
+
+def test_mark_turn_sets_the_key_on_the_sources_turn_scratch():
+    rogue = _Creature("rogue")
+    scope = EffectScope(ctx=FakeCtx(), source=rogue, target=rogue)
+    apply_effect(EffectCall(effect="mark_turn", args={"key": "sneak"}), scope)
+    assert rogue.turn_scratch == {"sneak": True}
 
 
 def test_remove_condition():

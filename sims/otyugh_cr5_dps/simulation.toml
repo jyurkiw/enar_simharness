@@ -17,31 +17,26 @@
 # parity.py` renames the baseline's columns to match before calling
 # `simharness.stats.compare()`.
 #
-# PARITY STATUS (measured Task #47, 10000 trials @ seed 20260701): PARTIAL,
-# documented — same discipline as Phase 3's Otyugh cut. Getting here required
-# upgrading three party archetypes beyond their Phase 3 simplifications
-# (life_cleric: round-conditional Bane/Bless/Sacred Flame opener; evoker_wizard:
-# round-1 Lightning Bolt; hunter_ranger: grapple-conditional weapon swap) and
-# wiring real Bane/Bless d20 dice into actions.py (conditions.py's `d20_dice`,
-# previously unwired — see those files' own comments) plus otyugh targeting
-# fixes (uniform-random target choice matching the old engine's `ctx.choice`,
-# `bite` retargeted to the existing captive, `tentacle` filtered off current
-# captives).
-#   PASS: every down_*/wiped_*/poisoned_* rate column except poisoned_otyugh.
-#   FAIL, close: side_dealt_party/taken_otyugh (~5.4% mean delta vs. the 3%
-#     tolerance — nearly there).
-#   FAIL, root cause identified but unresolved: side_dealt_monsters/dealt_otyugh
-#     (~54% OVER the baseline) — randomizing otyugh targeting (matching the old
-#     engine's `ctx.choice`) now lands more hits against the party's
-#     lower-AC members than the baseline shows; the exact remaining discrepancy
-#     (movement/reach pattern? pool composition?) wasn't isolated further.
-#   FAIL, pre-existing documented cut: dealt_thief_rogue (~25% under — no
-#     Cunning Strike rider) and poisoned_otyugh (0% vs. baseline's 92% — the
-#     same rider is what poisons the otyugh); dealt_life_cleric (still off —
-#     the triage/post-spike-heal branch needs `is_dead`/`set_flag`, neither
-#     built when this file was written).
-# Revisit if otyugh_cr5_x2/_compare/_monk's own parity checks point at the
-# same root causes (they share this party and this otyugh file).
+# PARITY STATUS (re-measured 2026-07 Bug-A follow-up, 10000 trials @ seed
+# 20260701): the former ~54% monster-damage OVERSHOOT is FIXED — root cause was
+# the thief_rogue (no Sneak Attack / Uncanny Dodge) and hunter_ranger (no
+# Hunter's Mark / Colossus Slayer) dealing ~half their real damage and soaking
+# too much, so the otyugh lived to act ~0.6 more turns/trial. See
+# design/07-known-issues.md (Bug A) for the full diagnosis and the reusable
+# primitives it added (reduce_damage/taking_damage, mark_turn/turn_marked, the
+# Concentration pattern).
+#   Now within/near tolerance: side_dealt_monsters/dealt_otyugh (~-6%),
+#     dealt_hunter_ranger (~-3%), dealt_thief_rogue (~-3%), taken_thief_rogue
+#     (~+16%, was +219%), dealt_evoker_wizard (~+2%).
+#   Residual misses, documented: dealt_champion_fighter (~-13% — the party now
+#     kills fast enough that the low-initiative fighter lands fewer non-overkill
+#     hits; a redistribution effect, not a fighter bug); poisoned_otyugh (~0.48
+#     vs 0.92 — cosmetic, the old Cunning Strike poison logic is unrecoverable,
+#     see Bug B); dealt_life_cleric (tiny absolute, buff/heal build).
+# The single-otyugh standard-party sibling sims (otyugh_cr5_compare/standard,
+# otyugh_cr5_monk/standard_1x) share this fix and this ~-6% result. The
+# multi-otyugh ones (otyugh_cr5_x2, _monk standard_2x) now UNDERshoot (~-25%):
+# an inherent board-vs-abstract kiting difference, see 07's Bug A.
 name = "otyugh_cr5_dps"
 description = "Otyugh CR5 DPS check vs the adventurers party"
 

@@ -6,12 +6,27 @@
 # expressed via `is_grappled(self)`/`is_grappling(target, self)`, matching
 # dnd5e_combat/characters/hunter_ranger/__init__.py's take_turn.
 #
-# REMAINING DELIBERATE CUT: Hunter's Mark (rider damage on a marked enemy,
-# dropped on a failed Concentration save when hit) and Colossus Slayer
-# (once/turn rider) both need a `damage_rider` effect primitive this engine
-# doesn't have yet, plus (for the Mark) a `taking_damage` reaction (design doc
-# 04 section 4 lists the trigger, Phase 5 wires the bus) — `hunters_mark_die`/
-# `colossus_slayer_die` stay as unused data for whenever that lands.
+# BUG-A/BUG-B REBUILD (design doc 07): Hunter's Mark and Colossus Slayer, the
+# ranger's two damage riders, were a deliberate Phase 4 cut and turned out to
+# be the SECOND-largest cause (after the Thief Rogue) of the otyugh sims'
+# monster-damage overshoot — without them the ranger, the party's top baseline
+# DPS (~42 dmg/trial), dealt only ~26, so the party killed the otyugh slower
+# and it lived to act more. Restored now that `damage_rider`/`turn_marked`
+# exist:
+#   * Hunter's Mark — +1d6 on every weapon hit against the ranger's target,
+#     but only while the ranger holds Concentration: the `hunters_mark`
+#     self-condition (applied at trial setup by the `cast_hunters_mark` trait —
+#     the ranger opens with it) gates the rider, and the `concentration`
+#     reaction drops it on a failed CON save (fixed DC 10 — the RAW
+#     `max(10, damage/2)` is DC 10 for every hit the otyugh lands; documented
+#     simplification) after taking damage. Not re-cast once dropped: matches
+#     the old engine leaving the mark down for the rest of a fight it lost
+#     Concentration in. Without this the always-on approximation overshot the
+#     ranger's damage by ~33% in the longer multi-otyugh fights (design doc 07).
+#   * Colossus Slayer — +1d8 once per turn against a target below its HP max
+#     (`hp_pct(target) < 1.0`), gated once-per-turn by `turn_marked`; fires on
+#     the first eligible hit (so on round 1, if the ranger strikes a still-full
+#     otyugh first, it correctly waits for the next hit that turn).
 #
 # PHASE 4 FIX: both weapons get `targets = "enemies"` (skips the default
 # "visible enemies only" sight requirement) — mundane weapon attacks don't
@@ -41,6 +56,29 @@ average = 44
 [stats.saves]
 constitution = 2
 
+# Hunter's Mark's concentration flag (a bare marker — no grants; its only job
+# is to be present-or-absent so the +1d6 rider can gate on it). Applied at
+# setup by the trait below, removed by the concentration reaction on a failed
+# save.
+[conditions.hunters_mark]
+
+# The ranger opens concentrating on Hunter's Mark (a bonus action on turn 1;
+# modeled as present from setup).
+[traits.cast_hunters_mark]
+effects = [ { effect = "attach_condition", condition = "hunters_mark" } ]
+
+# Concentration: a CON save (fixed DC 10) whenever the ranger takes damage;
+# on a failure it drops Hunter's Mark for the rest of the fight. `uses_
+# reaction = false` (a Concentration check is automatic, not the creature's
+# reaction), and the `when` guard means it only rolls — and only consumes a
+# die from the trial's RNG stream — while actually concentrating.
+[reactions.concentration]
+trigger = "taking_damage"
+when = "has_condition(self, 'hunters_mark')"
+effects = [
+  { effect = "require_save", ability = "constitution", dc = 10, on_fail = [ { effect = "remove_condition", condition = "hunters_mark" } ] },
+]
+
 [abilities.longbow]
 kind = "attack"
 to_hit = 9
@@ -49,6 +87,11 @@ damage_type = "piercing"
 range_normal = 150
 range_long = 600
 targets = "enemies"
+on_hit = [
+  { effect = "damage_rider", damage = "1d6", damage_type = "piercing", name = "hunters_mark", when = "has_condition(self, 'hunters_mark')" },
+  { effect = "damage_rider", damage = "1d8", damage_type = "piercing", name = "colossus_slayer", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+  { effect = "mark_turn", key = "colossus", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+]
 
 [abilities.shortsword]
 kind = "attack"
@@ -57,6 +100,11 @@ damage = "1d6+4"
 damage_type = "piercing"
 targets = "enemies"
 target_filter = "is_grappling(target, self)"
+on_hit = [
+  { effect = "damage_rider", damage = "1d6", damage_type = "piercing", name = "hunters_mark", when = "has_condition(self, 'hunters_mark')" },
+  { effect = "damage_rider", damage = "1d8", damage_type = "piercing", name = "colossus_slayer", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+  { effect = "mark_turn", key = "colossus", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+]
 
 [multiattack.ranged]
 actions = ["longbow", "longbow"]

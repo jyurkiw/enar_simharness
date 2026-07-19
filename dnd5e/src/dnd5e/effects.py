@@ -14,7 +14,14 @@ Phase 5 adds `redirect_attack`/`swap_positions` (reaction-context: retarget
 the pending attack / exchange board coordinates — design doc 04 section 4's
 ordering invariant, that these complete *before* the roll, is enforced by
 `actions.py`'s `attack`, not here) and `damage_rider` (extra dice on the
-triggering hit — the Masked Hector's advantage/mark riders). Every action
+triggering hit — the Masked Hector's advantage/mark riders).
+
+Bug-A follow-up (design doc 07) adds `reduce_damage` (reaction-context, the
+`taking_damage` trigger: multiply the pending hit's damage by a factor —
+the Thief Rogue's Uncanny Dodge, reusable for the Barbarian's Rage
+resistance) and `mark_turn` (set a once-per-turn `turn_scratch` toggle read
+back by the `turn_marked` predicate — the Thief Rogue's Sneak Attack
+first-hit-per-turn gate). Every action
 effect call may now carry a `when` (compiled at load time like any other,
 evaluated here against the acting creature/target/event before dispatch —
 design doc 01's masked_bruiser example gates several effects this way) and a
@@ -43,6 +50,7 @@ ACTION_EFFECTS = frozenset({
     "attach_condition", "remove_condition", "require_save", "set_flag", "end_trial",
     "emit_light", "limited_darkvision", "darkvision_immunity",
     "redirect_attack", "swap_positions", "damage_rider",
+    "reduce_damage", "mark_turn",
 })
 
 ALL_EFFECTS = ACTION_EFFECTS
@@ -206,11 +214,29 @@ def _swap_positions(args: dict, scope: EffectScope) -> None:
 
 def _damage_rider(args: dict, scope: EffectScope) -> None:
     """Extra dice on the triggering hit (the Masked Hector's advantage/mark
-    riders) — a second `deal()` call, not a mutation of the base hit's
-    already-dealt damage; crit-doubled the same way the base hit was, via
-    `scope.event["crit"]` (set by `actions._resolve_attack`)."""
+    riders, the Thief Rogue's Sneak Attack) — a second `deal()` call, not a
+    mutation of the base hit's already-dealt damage; crit-doubled the same way
+    the base hit was, via `scope.event["crit"]` (set by
+    `actions._resolve_attack`)."""
     amount = scope.ctx.roll(args["damage"], crit=bool(scope.event.get("crit")))
     scope.ctx.deal(scope.source, scope.target, amount, args.get("name", "rider"), args.get("damage_type"))
+
+
+def _reduce_damage(args: dict, scope: EffectScope) -> None:
+    """Reaction-only (design doc 04 section 4's `taking_damage` trigger):
+    multiply the pending attack's damage by `factor` (0.5 = halve). Writes to
+    a `CombatContext` side channel `actions._resolve_attack` reads back before
+    dealing — the Thief Rogue's Uncanny Dodge, and (future) the Barbarian's
+    Rage resistance, are both exactly this."""
+    scope.ctx.reduce_pending_damage(args["factor"])
+
+
+def _mark_turn(args: dict, scope: EffectScope) -> None:
+    """Set a once-per-turn toggle on the acting creature's `turn_scratch`
+    (cleared at the start of each of its turns by `system.take_turn`), read
+    back by the `turn_marked(key)` expression predicate — the mechanism the
+    Thief Rogue's Sneak Attack uses to fire on only its first hit each turn."""
+    scope.source.turn_scratch[args["key"]] = True
 
 
 _DISPATCH: dict[str, Callable[[dict, EffectScope], None]] = {
@@ -225,4 +251,6 @@ _DISPATCH: dict[str, Callable[[dict, EffectScope], None]] = {
     "redirect_attack": _redirect_attack,
     "swap_positions": _swap_positions,
     "damage_rider": _damage_rider,
+    "reduce_damage": _reduce_damage,
+    "mark_turn": _mark_turn,
 }

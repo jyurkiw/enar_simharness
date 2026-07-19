@@ -172,6 +172,13 @@ class ConcreteScope:
     def has_flag(self, name: str) -> bool:
         return self._ctx.flags.has(name)
 
+    def turn_marked(self, key: str) -> bool:
+        """Read a once-per-turn toggle the `mark_turn` effect set on the
+        acting creature's `turn_scratch` (Sneak Attack's first-hit gate).
+        `self` here is always the effect's source — the creature whose turn it
+        is — because effect `when` scopes bind `self` to the acting creature."""
+        return bool(self._self.turn_scratch.get(key, False))
+
     def any_yet_to_act(self, creatures) -> bool:
         order = self._ctx.turn_order
         self_idx = order.index(self._self.instance_name) if self._self.instance_name in order else -1

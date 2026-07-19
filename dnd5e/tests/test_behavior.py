@@ -455,3 +455,18 @@ def test_escape_hatch_choose_target_none_keeps_declarative_order(tmp_path):
     bf = Battlefield([actor, near, far], board=board)
     result = select_targets(actor, sb.abilities["hit"], make_ctx(bf))
     assert result[0].instance_name == "near"
+
+
+# =============================================================================
+# turn_marked / mark_turn once-per-turn gate (design doc 07, Bug A)
+# =============================================================================
+
+def test_turn_marked_reads_the_acting_creatures_turn_scratch(tmp_path):
+    from dnd5e.behavior import ConcreteScope
+    board = make_board(tmp_path)
+    actor = make_creature("rogue", "party", 0, 0)
+    bf = Battlefield([actor], board=board)
+    scope = ConcreteScope(make_ctx(bf), actor)
+    assert scope.turn_marked("sneak") is False
+    actor.turn_scratch["sneak"] = True
+    assert scope.turn_marked("sneak") is True

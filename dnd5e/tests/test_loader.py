@@ -289,6 +289,30 @@ def test_effect_call_target_ref_invalid_raises(tmp_path):
         load_creature(write(tmp_path, "x", body))
 
 
+def test_reduce_damage_requires_factor(tmp_path):
+    body = (f'name = "x"\n{MINIMAL_STATS}\n[reactions.dodge]\ntrigger = "taking_damage"\n'
+            'effects = [ { effect = "reduce_damage" } ]\n')
+    with pytest.raises(ValueError, match="factor"):
+        load_creature(write(tmp_path, "x", body))
+
+
+def test_mark_turn_requires_key(tmp_path):
+    body = (f'name = "x"\n{MINIMAL_STATS}\n[abilities.bite]\nkind = "attack"\nto_hit=5\ndamage="1d6"\n'
+            'on_hit = [ { effect = "mark_turn" } ]\n')
+    with pytest.raises(ValueError, match="key"):
+        load_creature(write(tmp_path, "x", body))
+
+
+def test_reduce_damage_and_turn_marked_gate_load_cleanly(tmp_path):
+    # The full Sneak-Attack-style gate: a once-per-turn damage_rider guarded by
+    # turn_marked, plus the mark_turn that sets it — all valid at load time.
+    body = (f'name = "x"\n{MINIMAL_STATS}\n[abilities.dagger]\nkind = "attack"\nto_hit=5\ndamage="1d4"\n'
+            'on_hit = [ { effect = "damage_rider", damage = "3d6", when = "not turn_marked(\'sneak\')" },'
+            ' { effect = "mark_turn", key = "sneak", when = "not turn_marked(\'sneak\')" } ]\n')
+    sb = load_creature(write(tmp_path, "x", body))
+    assert len(sb.abilities["dagger"].on_hit) == 2
+
+
 # ---- Phase 4: target_filter / multiattack when / behavior.targeting / behavior.custom ----
 
 def test_ability_target_filter_parses_and_validates(tmp_path):

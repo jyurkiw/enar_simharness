@@ -17,6 +17,17 @@
 # dnd5e_data/monsters/otyugh.toml (which otyugh_cr5_dps/_compare/_monk also
 # use) — applied via [overrides.otyugh] below instead.
 #
+# PARITY UPDATE (2026-07 Bug-A follow-up): the party rebuild (rogue Sneak
+# Attack/Uncanny Dodge, ranger Hunter's Mark/Colossus Slayer — see
+# design/07-known-issues.md Bug A) flipped this sim from monster-damage OVER to
+# ~25% UNDER. In the longer 2-otyugh fight the ranger kites too safely on the
+# board (takes ~10.4 dmg vs the abstract baseline's ~12.5), rarely loses
+# Concentration, keeps Hunter's Mark up the whole fight, and overshoots ~+31%,
+# so the party overkills. This is an inherent board-vs-abstract kiting
+# difference (not distortable without unfaithfully nerfing the ranger); left as
+# an accepted model difference. The pre-rebuild notes below are retained for
+# history but the specific numbers are superseded.
+#
 # PARITY STATUS (measured Task #48, 10000 trials @ seed 20260701): FAIL,
 # documented, escape-hatch candidate per doc05's own prediction for this sim.
 # The pack-rule override below (`target_filter` on tentacle) was implemented

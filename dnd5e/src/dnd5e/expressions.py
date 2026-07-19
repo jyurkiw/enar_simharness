@@ -270,7 +270,7 @@ FUNCTION_NAMES = frozenset({
     "is_grappling", "is_grappled_by", "is_grappled",
     "resource_available", "round", "has_flag", "any_yet_to_act", "side_of",
     "enemies_within", "allies_within", "enemies_tagged", "allies_tagged",
-    "enemies_within_of",
+    "enemies_within_of", "turn_marked",
 })
 
 
@@ -358,6 +358,7 @@ class Scope(Protocol):
     def resource_available(self, name: str) -> bool: ...
     def round_number(self) -> int: ...
     def has_flag(self, name: str) -> bool: ...
+    def turn_marked(self, key: str) -> bool: ...
     def any_yet_to_act(self, creatures: Sequence[Any]) -> bool: ...
     def side_of(self, who: Any) -> str: ...
 
@@ -496,6 +497,7 @@ _CALL_TABLE: dict[str, Callable[..., Any]] = {
     "resource_available": lambda scope, name: scope.resource_available(name),
     "round": lambda scope: scope.round_number(),
     "has_flag": lambda scope, name: scope.has_flag(name),
+    "turn_marked": lambda scope, key: scope.turn_marked(key),
     "any_yet_to_act": lambda scope, s: scope.any_yet_to_act(s),
     "side_of": lambda scope, who: scope.side_of(who),
     "enemies_within": lambda scope, ft: scope.enemies_within(ft),

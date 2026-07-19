@@ -77,6 +77,11 @@ class CombatContext:
         # `redirect_attack`/`swap_positions` write here; `attack()` reads it
         # back immediately after offering the pre-roll reactions.
         self._pending_redirect: Optional[Creature] = None
+        # Damage-reduction side channel (design doc 07, Bug A): the
+        # `reduce_damage` effect (Uncanny Dodge) multiplies this; `_resolve_
+        # attack` resets it before offering `taking_damage` and reads it back
+        # before dealing.
+        self._pending_damage_reduction: float = 1.0
 
     def roll(self, code: str, *, crit: bool = False) -> int:
         return self.resolver.damage(code, crit=crit)
@@ -91,6 +96,31 @@ class CombatContext:
 
     def set_pending_redirect(self, to: Creature) -> None:
         self._pending_redirect = to
+
+    def reduce_pending_damage(self, factor: float) -> None:
+        self._pending_damage_reduction *= factor
+
+    def offer_taking_damage(self, defender: Creature, amount: int, *, attacker: Creature,
+                            ability) -> int:
+        """Design doc 04 section 4's `taking_damage` trigger, published for
+        *attack* damage only (Uncanny Dodge and Rage resistance both react to
+        attacks, not save effects — so `_resolve_save` never calls this).
+        Offers the reaction to the defender, then returns the (possibly
+        reduced) amount. A no-op fast-path for the overwhelming majority of
+        creatures, which declare no reactions at all, so it never perturbs a
+        sim without a damage-reducing reactor."""
+        if amount <= 0 or not defender.statblock.reactions:
+            return amount
+        from . import reactions
+        from .behavior import BehaviorContext
+
+        self._pending_damage_reduction = 1.0
+        behavior_ctx = BehaviorContext(battlefield=self.battlefield, round_index=self.round_index,
+                                       turn_order=self.turn_order, flags=self.flags, resolver=self.resolver)
+        event = {"attacker": attacker, "target": defender, "ability": ability, "amount": amount}
+        reactions.offer("taking_damage", event, candidates=[defender],
+                        behavior_ctx=behavior_ctx, combat_ctx=self)
+        return round(amount * self._pending_damage_reduction)
 
     def swap_positions(self, a: Creature, b: Creature) -> None:
         if a.coord is not None and b.coord is not None:
@@ -268,7 +298,13 @@ def _resolve_attack(ctx: CombatContext, actor: Creature, ability: Ability, targe
                      long_range=ability.range_long, ability=ability)
     defender = out.target or target
     if out.hit:
-        ctx.deal(actor, defender, out.damage, ability.name, ability.damage_type)
+        # `taking_damage` reaction (design doc 07, Bug A): Uncanny Dodge can
+        # halve the base hit before it lands. Offered for attack damage only,
+        # a no-op for defenders with no reactions. on_hit riders below are
+        # dealt separately and are NOT reduced (matches the split-`deal`
+        # model — a documented limitation for cross-rider cases).
+        dealt = ctx.offer_taking_damage(defender, out.damage, attacker=actor, ability=ability)
+        ctx.deal(actor, defender, dealt, ability.name, ability.damage_type)
         # `event["crit"]`/`["advantaged"]`: on_hit effects (e.g. the Masked
         # Hector's `damage_rider`) key their own dice off whether *this* hit
         # was a crit/had advantage, same as the base damage did.

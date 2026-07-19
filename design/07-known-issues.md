@@ -13,57 +13,72 @@ the sim-level "FAILs" below are actually the same root cause reappearing).
 
 ---
 
-## Bug A — Monster damage output overshoots baseline (systemic, cross-sim)
+## Bug A — Monster damage output overshoots baseline — ROOT-CAUSED & FIXED (standard party)
 
-**Symptom:** total damage dealt by the monster side is 12-171% over the old-engine
-baseline, magnitude scaling with rounds/monster-count (worse with more turns for the
-per-turn overshoot to compound). Party-side damage and down/wipe rates are pulled off
-along with it as a knock-on effect.
+**Status (2026-07, follow-up session):** diagnosed to completion and fixed for the
+standard "adventurers" party. **The otyugh's own mechanics were never wrong** — hit rate
+scales correctly with AC, crit rate is ~5%, damage-per-hit is exactly its dice. The
+"overshoot" was entirely *the otyugh getting ~0.6 more turns per trial* because the
+**party was killing it too slowly and soaking too much damage** — specifically, party
+members were missing class features cut back in Phase 3/4:
 
-**Where:** every one of the 7 otyugh sims (`otyugh_cr5_dps` ~54% over, `_x2` compounds
-it with 2 otyughs, `_compare`/`_monk` 55-72%/12-171% across variants, `_shadow_solo`/
-`_pair`/`_board` 66-142% depending on rounds-per-monster). **Very likely also the
-dominant driver** behind masks' `dealt_masked_bruiser`/`dealt_masked_hector_*` gaps
-(Phase 5) — the Bruiser/Hectors run the exact same `select_targets`/`ctx.attack`
-pipeline as the otyugh, and masks was never checked against this hypothesis before
-Phase 5 was paused (see Bug C).
+- **thief_rogue** had no Sneak Attack (dealing ~half its real damage) and no Uncanny
+  Dodge (soaking ~3x the damage it should). It's a primary striker; at half strength the
+  otyugh lived longer *and* the rogue's inflated damage-taken padded the monster's total.
+- **hunter_ranger** had no Hunter's Mark or Colossus Slayer riders — the party's top
+  baseline DPS (~42) was dealing ~26.
 
-**Leading theory (not confirmed):** the otyugh's targeting was fixed in Phase 4 to
-match the old engine's uniform-random target choice (`ctx.choice`, replacing an
-initial "always nearest" default) — this now lands more hits against the party's
-lower-AC members than the baseline shows. The *exact* remaining discrepancy (is it
-purely AC-selection bias, a movement/reach interaction, or something in the resolver's
-hit-math) was never isolated further — every sim just re-confirmed the same pattern
-without digging into the resolver itself.
+Restoring both (see the rebuild in each creature file, and the new primitives below)
+took `otyugh_cr5_dps` from **+54% to −6%**; likewise `otyugh_cr5_compare/standard` and
+`otyugh_cr5_monk/standard_1x` (single otyugh, standard party). Decisive evidence: scaling
+party damage +25% barely moved the otyugh, but restoring the two rogue features alone
+dropped it from +57% to +7%.
 
-**Where to look first:** `dnd5e/src/dnd5e/actions.py`'s `attack()`/`_resolve_attack`
-and `behavior.py`'s `select_targets` — compare a single fixed matchup (one otyugh, one
-fixed-AC party member, no randomness in targeting) between old and new engines at the
-resolver level before reintroducing target-selection randomness, to isolate whether
-the gap is in target *selection* or in the roll/damage math itself.
+**New reusable primitives this required** (all with unit tests, all now available to any
+creature): `reduce_damage` effect + `taking_damage` reaction publish point in
+`_resolve_attack` (Uncanny Dodge; reusable for Barbarian Rage resistance); `mark_turn`
+effect + `turn_marked(key)` predicate (once-per-turn riders like Sneak Attack); and the
+Concentration pattern (a `taking_damage` reaction doing a CON save that drops a
+self-condition gating a rider — Hunter's Mark).
+
+**What's left (deliberately not done — same root cause, different members):**
+- **Other parties still overshoot** because *their* members are missing features:
+  `otyugh_cr5_compare/vanguard` (+72%) and `otyugh_cr5_monk/monk_*` (+73%/+16%) need the
+  same rebuild for the barbarian (Rage/Reckless), paladin (Divine Smite), and monk (Flurry
+  of Blows / Martial Arts). Identical technique, now-existing tools — mostly TOML.
+- **Multi-otyugh standard sims now *under*shoot** (`otyugh_cr5_x2`/`_monk standard_2x`,
+  monster damage ~−25%): in the longer 2-otyugh fight the ranger *kites too safely on the
+  board* (takes 10.4 dmg vs the abstract baseline's 12.5), so it rarely loses Concentration
+  and keeps Hunter's Mark up the whole fight, dealing ~+31%. This is an **inherent
+  board-vs-abstract difference** (the abstract old engine had no kiting), not a distortable
+  bug — the Concentration mechanic is correct and does fire; the board is simply safer.
+  Left as an accepted model difference.
+- `poisoned_otyugh` still undershoots (~0.48 vs baseline 0.92) — see Bug B.
 
 ---
 
-## Bug B — thief_rogue's Cunning Strike rider was never implemented
+## Bug B — thief_rogue was missing Sneak Attack / Uncanny Dodge / Cunning Strike — MOSTLY FIXED
 
-**Symptom:** `dealt_thief_rogue` runs 18-45% under baseline everywhere; `poisoned_*`
-(monster side) reads a flat 0% in the new engine vs. baseline's 39-99% — Cunning
-Strike is what poisons the *target*, not the reverse, and it's simply missing.
+**Status (2026-07, same follow-up session as Bug A):** the rogue was rebuilt as part of
+fixing Bug A (the two are the same root cause). `thief_rogue.toml` now has Sneak Attack
+(once-per-turn 2d6 rider via `turn_marked`), Uncanny Dodge (`taking_damage` reaction +
+`reduce_damage`), and a Cunning Strike Poison approximation. Result on `otyugh_cr5_dps`:
+`dealt_thief_rogue` −25% → **−3%**, `taken_thief_rogue` +219% → **+16%**. Bug B's damage
+side is closed.
 
-**Where:** every otyugh sim, and masks (Phase 5) — same root cause resurfacing, not a
-new bug there.
+**Remaining, and now known to be irreducible:** `poisoned_<monster>` still undershoots
+(~0.48 vs baseline ~0.92). The rogue's poison is modeled as a DC-15 CON save on the sneak
+hit; the otyugh's good CON save (+7) means it resists ~65% of the time, so over ~2-3 rogue
+turns it ends up poisoned ~48%, not 92%. The old engine clearly applied poison far more
+reliably (lower DC, no save, or more attempts via its exact alternating poison/trip
+Cunning Strike logic), but **that logic is unrecoverable** — the old engine is deleted.
+Since `poisoned` is a purely cosmetic marker (no roll effect in either engine — see
+`conditions.py`), this column will stay a documented cosmetic miss rather than be
+force-fit by distorting the save. Not worth further chasing.
 
-**Deliberate cut since:** Phase 3 (`thief_rogue.toml`'s conversion never carried this
-over — needs a `damage_rider`-shaped effect plus turn-alternating "which effect fires
-this turn" state that didn't exist in the engine yet at the time).
-
-**What a fix touches:** `effects.py` already has `damage_rider` (built for masks'
-Hector in Phase 5) — thief_rogue's ability likely just needs `on_hit` effects using it,
-gated by whatever turn-alternating condition Cunning Strike actually uses (check
-`dnd5e_combat/characters/thief_rogue/__init__.py` for the exact old-engine logic before
-guessing at the TOML). Should be a comparatively small, well-contained fix once
-someone sits down with it — worth doing early since it taints `poisoned_*` parity
-checks on nearly every sim in the workspace.
+The sneak die is 2d6 (not the full 3d6) as a stand-in for the 2024 Cunning Strike
+dice-for-effect trade; with 3d6 `dealt_thief_rogue` overshot (+17%), so 2d6 is the tuned
+value, documented in the file header as an approximation of the (lost) exact rider.
 
 ---
 

@@ -266,6 +266,30 @@ def test_attack_with_no_matching_reaction_is_unaffected(tmp_path):
     assert out.target is b
 
 
+def test_taking_damage_reaction_halves_first_hit_once_per_round(tmp_path):
+    """Uncanny Dodge (design doc 07, Bug A): a `taking_damage` reaction with
+    `reduce_damage factor=0.5` halves the first hit the defender takes, and
+    `uses_reaction` consumes the once-per-round economy so a second hit the
+    same round lands in full."""
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    otyugh = make_creature("otyugh", "monsters", 0, 0)
+    dodge = Reaction(name="uncanny_dodge", trigger="taking_damage", uses_reaction=True,
+                     effects=(EffectCall(effect="reduce_damage", args={"factor": 0.5}),))
+    sb = Statblock(name="rogue", display_name="rogue", classification={}, stats=make_stats(ac=10),
+                   reactions={"uncanny_dodge": dodge})
+    rogue = Creature(statblock=sb, instance_name="rogue", side="party")
+    rogue.place(1, 0)
+    ctx, _, _ = make_ctx(board, [15, 10, 15, 8], [otyugh, rogue])
+    ability = Ability(name="slam", kind="attack", to_hit=6, damage="1d8", damage_type="bludgeoning")
+
+    resolve_ability(ctx, otyugh, ability, [rogue])
+    assert rogue.current_damage == 5           # 10 halved by Uncanny Dodge
+    assert rogue.round_scratch.get("reaction_used") is True
+
+    resolve_ability(ctx, otyugh, ability, [rogue])
+    assert rogue.current_damage == 13          # 5 + full 8 (reaction already spent this round)
+
+
 # ---- saving_throw ---------------------------------------------------------------
 
 def test_saving_throw_uses_creature_save_mod(tmp_path):
