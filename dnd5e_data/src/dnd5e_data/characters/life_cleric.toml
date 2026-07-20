@@ -8,14 +8,20 @@
 # +-1d4 d20 dice are real now too (conditions.py's `d20_dice`, wired into
 # actions.py this phase).
 #
-# REMAINING DELIBERATE CUT: the old policy's top-of-turn triage ("if any ally
-# is at 0 HP, drop everything and Cure Wounds them") and its post-spike divert
-# ("after an enemy crit or a failed tentacle_slam save, heal instead of Sacred
-# Flame") both need functions this engine doesn't expose yet — `is_dead`
-# isn't in the closed function registry (needed to exclude the truly dead from
-# "heal the dying"), and the spike divert needs `set_flag`/`has_flag` (Task
-# #51, not built when this file was written). `cure_wounds` stays defined but
-# unreachable until one of those lands.
+# BUG-C REBUILD (design doc 07): the old policy's top-of-turn triage ("if any
+# ally is at 0 HP, drop everything and Cure Wounds them") was cut in Phase 4 and
+# `cure_wounds` was left DEFINED BUT UNREACHABLE — no multiattack option ever
+# selected it, and it had no `targets`, so had it ever been reached the default
+# "visible enemies" pool would have aimed the heal at a monster. That missing
+# triage was the reason the party's front-liners went Down ~5x more often than
+# baseline while taking LESS total damage (they dropped early and then stopped
+# being hit). Restored as the `triage` option below, now that the blockers are
+# gone: `downed_allies` (a new selector — `allies` deliberately excludes the
+# Down, so it could never see a dying ally) plus the priority ordering that
+# makes triage pre-empt the Bane/Bless opener.
+# STILL CUT (small): the post-spike divert ("after an enemy crit or a failed
+# tentacle_slam save, heal instead of Sacred Flame") — `set_flag`/`has_flag`
+# exist now, but nothing publishes an "enemy crit" flag yet.
 name = "life_cleric"
 display_name = "Life Cleric"
 
@@ -49,6 +55,7 @@ damage_type = "radiant"
 [abilities.cure_wounds]
 kind = "heal"
 amount = "1d8+7"
+targets = "downed_allies"   # raise the dying, never "the nearest visible enemy"
 
 [abilities.bane]
 kind = "save"
@@ -60,6 +67,11 @@ on_fail = [ { effect = "attach_condition", condition = "bane" } ]
 kind = "utility"
 targets = "allies"
 effects = [ { effect = "attach_condition", condition = "bless" } ]
+
+[multiattack.triage]                       # drop everything to raise a dying ally
+actions = ["cure_wounds"]
+when = "count(downed_allies) > 0"
+priority = 40
 
 [multiattack.bane_opener]
 actions = ["bane"]

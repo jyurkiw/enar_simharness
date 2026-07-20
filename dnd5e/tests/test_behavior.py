@@ -470,3 +470,21 @@ def test_turn_marked_reads_the_acting_creatures_turn_scratch(tmp_path):
     assert scope.turn_marked("sneak") is False
     actor.turn_scratch["sneak"] = True
     assert scope.turn_marked("sneak") is True
+
+
+def test_downed_allies_selector_sees_the_dying_that_allies_excludes(tmp_path):
+    """`allies` filters out the Down (battlefield.allies_of), so a healer needs
+    `downed_allies` to find who to raise (design doc 07, Bug C)."""
+    from dnd5e.behavior import ConcreteScope
+    board = make_board(tmp_path)
+    cleric = make_creature("cleric", "party", 0, 0)
+    hurt = make_creature("rogue", "party", 1, 0, hp=20)
+    bf = Battlefield([cleric, hurt], board=board)
+    scope = ConcreteScope(make_ctx(bf), cleric)
+
+    assert [c.instance_name for c in scope.allies()] == ["rogue"]
+    assert scope.downed_allies() == []
+
+    hurt.current_damage = 999            # now Down
+    assert scope.allies() == []                                   # allies_of hides it
+    assert [c.instance_name for c in scope.downed_allies()] == ["rogue"]

@@ -260,6 +260,9 @@ def parse(source: str) -> Node:
 SELECTOR_NAMES = frozenset({
     "self", "target", "it", "enemies", "allies",
     "enemies_grappled_by_self", "nearest_enemy", "ally_lowest_hp",
+    # `allies` deliberately excludes the Down (battlefield.allies_of), so a
+    # healer's "who needs raising" query needs its own selector.
+    "downed_allies",
 })
 
 # Call-syntax functions (design doc 04 section 1's function registry, v1).
@@ -333,6 +336,7 @@ class Scope(Protocol):
     def enemies(self) -> Sequence[Any]: ...
     def allies(self) -> Sequence[Any]: ...
     def enemies_grappled_by_self(self) -> Sequence[Any]: ...
+    def downed_allies(self) -> Sequence[Any]: ...
     def enemies_within(self, ft: float) -> Sequence[Any]: ...
     def allies_within(self, ft: float) -> Sequence[Any]: ...
     def enemies_tagged(self, tag: str) -> Sequence[Any]: ...
@@ -415,6 +419,8 @@ def _eval_selector(node: Selector, scope: Scope) -> Any:
         return scope.allies()
     if root == "enemies_grappled_by_self":
         return scope.enemies_grappled_by_self()
+    if root == "downed_allies":
+        return scope.downed_allies()
     if root == "nearest_enemy":
         return scope.nearest_enemy()
     if root == "ally_lowest_hp":

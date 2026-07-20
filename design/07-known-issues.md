@@ -101,34 +101,51 @@ value, documented in the file header as an approximation of the (lost) exact rid
 
 ---
 
-## Bug C — masks (Phase 5) parity fails badly, not just marginally
+## Bug C — masks parity — LARGELY RESOLVED, one design question left
 
-**Symptom:** most `dealt_*`/`taken_*` columns 20-60% off baseline, several `down_*`
-rates off by 10-58 percentage points — `down_thief_rogue` alone is ~7x baseline
-(0.09 -> 0.6-0.7). Categorically worse than any otyugh sim's gap above.
+**Status (2026-07, after the Bug A/B party rebuild):** most of Bug C turned out to be
+downstream of Bug A/B, exactly as suspected. The original symptoms are gone or inverted:
+`down_thief_rogue` was ~7x baseline (0.6-0.7 vs 0.09) and is now **0.12**; the monster
+side no longer overshoots at all. One genuine masks-era bug was found and fixed, and one
+design question remains.
 
-**Where:** `sims/masks`, all 6 sweep variants. Full numbers: re-run
-`scratch/check_masks_parity.py` (seeds come from each `sims/masks/<variant>/baseline/
-meta.json`, so it's reproducible without re-deriving anything).
+**Genuine bug found and fixed — the Life Cleric's triage heal never fired.**
+`life_cleric.toml` defined `cure_wounds` but **no multiattack option ever selected it**,
+and it had no `targets`, so had it ever been reached the default "visible enemies" pool
+would have aimed the heal at a monster. That was why front-liners went Down ~5x more than
+baseline *while taking less total damage* — they dropped early and then stopped being hit.
+Restored as a `triage` multiattack option (priority 40, above the Bane/Bless opener) with
+`when = "count(downed_allies) > 0"`. This needed a new **`downed_allies` selector**:
+`allies` deliberately excludes the Down (`battlefield.allies_of`), so `any(allies,
+is_down(it))` is permanently false and a healer literally could not see who to raise —
+a trap worth remembering when writing any "help the dying" rule.
 
-**Not this sim's own new bug:** the `poisoned_*` mismatch is Bug B, not new. Chase Bug
-A first — masks' Bruiser/Hectors share the exact pipeline Bug A already taints.
+**Remaining, and it's a design question, not a bug: the ranger is untouchable on a large
+board.** In masks (8 rounds, 30x30 arena) the ranger's `kite` tactic stands "as far from
+the target as possible while within weapon range" — and a 150 ft longbow range on a 150 ft
+board means *the whole board*. Measured: the ranger takes damage **1.05 times per trial
+across 8 rounds** (8.4 damage), is essentially never targeted (the monsters' nearest-first
+targeting never reaches it), keeps Hunter's Mark up the entire fight, and so deals **+32%**
+vs baseline — which in turn makes the monster side undershoot **~-42%**. It also explains
+the residual rogue pressure: the Bruiser *wants* a `priority_strike` target (ranger/rogue)
+but can never catch the ranger, so the rogue absorbs all of it.
 
-**Genuinely new leads, unconfirmed:**
-1. The "Break generator" focus strategy (kill the Poets first, which should suppress
-   the Hectors' `+2d6` advantage rider) shows *higher* Hector damage than "Natural" in
-   a quick check — backwards from the old engine's own finding. Check whether
-   `event.advantaged` (set by `actions._resolve_attack`, read by `masked_hector.toml`'s
-   `damage_rider` `when` clause) is actually wired correctly, or whether this is a real
-   emergent effect of the fight resolving differently under that strategy (e.g. more
-   Hector turns before the Poets' Insult would've mattered anyway).
-2. `down_thief_rogue`'s huge jump may be the new `priority_strike` tag (added this
-   phase specifically for masks — see `sims/masks/simulation.toml`) over-concentrating
-   both the Bruiser's own attacks *and* its Deceptive Defense reaction onto ranger/rogue
-   every single trial, rather than spreading across the party the way the old engine's
-   looser heuristics did. Test: temporarily strip the `priority_strike`-tag-favoring
-   `[[behavior.targeting]]` rules from `masked_bruiser.toml` and re-run the parity check
-   — if the gap shrinks a lot, this is the (or a) real driver.
+Capping the kite standoff shows how much of the sim hangs on this (2000 trials,
+adventurers_natural; baseline monsters 95.59, ranger 128.55):
+
+| kite cap | monsters dealt | ranger dealt | ranger taken |
+|---|---|---|---|
+| none (150 ft, current) | 55.6 (−42%) | 169.5 (+32%) | 7.9 |
+| 60 ft | 70.4 (−26%) | 147.4 (+15%) | 28.3 |
+| 30 ft | 76.6 (−20%) | 145.5 (+13%) | 35.5 |
+
+So a capped standoff recovers a large chunk but does not fully close it — the ranger's
+riders (Hunter's Mark every hit + Colossus Slayer every turn) also simply scale better
+across an 8-round fight than the old engine's did, and the old rider logic is unrecoverable.
+**Deciding whether `kite` should mean "maximum weapon range" (current, documented in
+movement.py) or "a tactical standoff" is a design call with cross-sim blast radius** — the
+otyugh sims are unaffected only because `plain_room` is too small to kite on. Not changed
+unilaterally; this is the open item for Bug C.
 
 **Full design-decision context** (what's declarative vs. hatched, what was cut and
 why): `design/06-implementation-guide.md`'s Phase 5 section, and `masked_bruiser.toml`/

@@ -89,6 +89,15 @@ class ConcreteScope:
         enemy_names = {e.instance_name for e in self.enemies()}
         return [bf.creatures[n] for n in names if n in enemy_names]
 
+    def downed_allies(self):
+        """Same-side creatures that are Down — the healer's triage pool.
+        `allies()` can't serve this: `battlefield.allies_of` filters the Down
+        out (correctly, so buffs/most targeting skip them), which would make
+        `any(allies, is_down(it))` permanently false."""
+        bf = self._ctx.battlefield
+        return [c for c in bf.members(self._self.side)
+                if c.is_down and c.instance_name != self._self.instance_name]
+
     def enemies_within(self, ft: float):
         bf = self._ctx.battlefield
         return [e for e in self.enemies() if (bf.distance_ft(self._self, e) or 0) <= ft]
