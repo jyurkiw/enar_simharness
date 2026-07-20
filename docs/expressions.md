@@ -91,6 +91,7 @@ pinning the behavior. **Check the evaluator before concluding something is inexp
 | `[multiattack.*].when` | actor | — | Chosen before targets exist |
 | `target_filter` | actor | each candidate | Runs once per candidate |
 | `[[behavior.targeting]].when` | actor | each candidate | |
+| `advantage_when` (on an attack) | attacker | the final target | Evaluated at swing time, after any redirect (Pack Tactics) |
 | Effect-call `when` | effect source | effect target | Plus `event.*` for reactions |
 | `[reactions.*].when` | the reactor | — | `event.*` available |
 
