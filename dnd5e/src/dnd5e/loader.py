@@ -161,6 +161,8 @@ def _validate_effect_args(call: EffectCall, *, where: str, known_conditions: fro
         require_keys(call.args, ["factor"], where=where)
     elif call.effect == "mark_turn":
         require_keys(call.args, ["key"], where=where)
+    elif call.effect == "make_attack":
+        require_keys(call.args, ["ability"], where=where)
 
 
 def _build_ability(name: str, spec: dict, *, where: str, known_conditions: frozenset) -> Ability:

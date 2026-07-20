@@ -183,12 +183,26 @@ class CombatContext:
             if target.instance_name != instance.source:
                 disadvantage = True
                 attacker.turn_scratch["attacked_other_than_source"] = True
-        # Outside melee reach, this is a ranged attack: needs line of sight,
-        # subject to cover, gated by range bands.
+        # Outside melee reach, this is a ranged attack: subject to cover and
+        # gated by range bands.
+        #
+        # An UNSEEN target is disadvantage, NOT an automatic miss (design doc 07,
+        # shadow-sim fix) — the same RAW principle doc 06's Gotcha #6 already
+        # applied to the *targeting* pool ("Blinded imposes disadvantage, not an
+        # inability to attack"), which had never been carried through to attack
+        # *resolution*. Auto-missing here silently reduced the ranger to ~15% of
+        # its damage in the darkness sims: it kites outside the dark, shoots into
+        # it, and every shot was discarded before a roll. Abilities that genuinely
+        # require sight (spells) never reach this point — the sight-gated default
+        # targeting pool already excludes an unseen target, so only weapons that
+        # opted into `targets = "enemies"` can shoot blind.
+        # Full cover remains an auto-miss: there is no line to the target at all.
         cover_bonus = 0
         if not bf.in_reach(attacker, target):
-            if not bf.can_see(attacker, target) or bf.has_full_cover(attacker, target):
+            if bf.has_full_cover(attacker, target):
                 return AttackOutcome(hit=False, crit=False, damage=0, target=target)
+            if not bf.can_see(attacker, target):
+                disadvantage = True
             cover_bonus = bf.cover_ac_bonus(attacker, target)
             if normal_range is not None:
                 dist = bf.distance_ft(attacker, target)

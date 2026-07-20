@@ -214,11 +214,13 @@ class Dnd5eSystem:
             if custom is not None:
                 scope = ConcreteScope(behavior_ctx, actor)
                 dest = escape_hatch.resolve(custom).plan_movement(actor, scope)
+            before = actor.coord
             if dest is not None:
                 movement.move_to_cell(actor, dest, game.battlefield)
             else:
                 movement.apply_tactic(actor.statblock.behavior.tactic, actor, targets[0], game.battlefield,
                                       max_range_ft=ability.range_normal)
+            self._offer_opportunity_attacks(actor, before, actor.coord, game, ctx)
             resolve_ability(game.combat_ctx, actor, ability, targets)
 
     def is_over(self, ctx: TrialContext) -> bool:
@@ -333,6 +335,34 @@ class Dnd5eSystem:
         if name == "attacked_other_than_source_this_turn":
             return bool(creature.turn_scratch.get("attacked_other_than_source"))
         raise ValueError(f"unknown unless predicate {name!r}")  # pragma: no cover (validated at load)
+
+    def _offer_opportunity_attacks(self, actor: Creature, before, after,
+                                   game: GameState, ctx: TrialContext) -> None:
+        """Publish `enemy_left_reach` (design doc 04 section 4's trigger, wired
+        as of design doc 07) to every enemy whose reach `actor` just walked out
+        of — the Opportunity Attack. This is what the shadow sims'
+        `killed_on_retreat` column measures: parting shots on a fleeing monster.
+        Reach is evaluated against the board cells directly (not `in_reach`)
+        because the actor has already moved by the time this runs. A no-op for
+        enemies that declare no reactions, so sims without an OA reaction draw
+        exactly the dice they did before."""
+        if before is None or after is None or before == after:
+            return
+        bf = game.battlefield
+        board = bf.board
+        behavior_ctx = BehaviorContext(battlefield=bf, round_index=ctx.round_index,
+                                       turn_order=game.turn_order, flags=game.flags,
+                                       resolver=game.combat_ctx.resolver)
+        for enemy in bf.enemies_of(actor):
+            if enemy.coord is None or not enemy.statblock.reactions:
+                continue
+            was_in_reach = board.distance_ft(enemy.coord, before) <= enemy.reach_ft
+            still_in_reach = board.distance_ft(enemy.coord, after) <= enemy.reach_ft
+            if was_in_reach and not still_in_reach:
+                reactions.offer("enemy_left_reach",
+                                {"attacker": enemy, "target": actor, "mover": actor},
+                                candidates=[enemy], behavior_ctx=behavior_ctx,
+                                combat_ctx=game.combat_ctx)
 
     def _offer_turn_start_reactions(self, actor: Creature, game: GameState, ctx: TrialContext) -> None:
         """The Masked Bruiser's Sleight of Crowd fires here — the same point

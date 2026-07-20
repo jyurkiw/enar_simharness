@@ -605,3 +605,51 @@ def test_turn_start_reaction_fires_on_own_turn_via_when_self_check(tmp_path):
 
     system.take_turn(ctx, "bruiser")
     assert ctx.game.flags.has("sleight_used")
+
+
+# ---- Opportunity attacks (design doc 07): enemy_left_reach + make_attack ----
+
+def _oa_guard_statblock():
+    oa = Reaction(name="opportunity_attack", trigger="enemy_left_reach", uses_reaction=True,
+                  effects=(EffectCall(effect="make_attack", args={"ability": "poke"}),))
+    return Statblock(
+        name="guard", display_name="guard", classification={}, stats=make_stats(),
+        abilities={"poke": Ability(name="poke", kind="attack", to_hit=99, damage="1d6",
+                                   damage_type="piercing")},
+        reactions={"opportunity_attack": oa},
+    )
+
+
+def test_opportunity_attack_fires_when_a_creature_leaves_reach(tmp_path):
+    board = make_board(tmp_path)
+    guard = RosterSlot(statblock=_oa_guard_statblock(), instance_name="guard",
+                       side="party", start=(0, 0))
+    mover = RosterSlot(statblock=attacker_statblock("mover", hp_average=99),
+                       instance_name="mover", side="monsters", start=(1, 0))
+    system = Dnd5eSystem(board=board, roster=[guard, mover], max_rounds=3)
+    ctx = make_ctx([15, 10])
+    system.setup_trial(ctx)
+    m = ctx.game.creatures["mover"]
+
+    # Walk out of the guard's 5 ft reach: (1,0) -> (5,0). Dice: attack roll, damage.
+    ctx.game.combat_ctx.resolver.dice._values = [12, 4]
+    system._offer_opportunity_attacks(m, (1, 0), (5, 0), ctx.game, ctx)
+    assert m.current_damage == 4
+    assert ctx.game.creatures["guard"].round_scratch.get("reaction_used") is True
+
+
+def test_no_opportunity_attack_when_still_in_reach_or_not_moving(tmp_path):
+    board = make_board(tmp_path)
+    guard = RosterSlot(statblock=_oa_guard_statblock(), instance_name="guard",
+                       side="party", start=(0, 0))
+    mover = RosterSlot(statblock=attacker_statblock("mover", hp_average=99),
+                       instance_name="mover", side="monsters", start=(1, 0))
+    system = Dnd5eSystem(board=board, roster=[guard, mover], max_rounds=3)
+    ctx = make_ctx([15, 10])
+    system.setup_trial(ctx)
+    m = ctx.game.creatures["mover"]
+    ctx.game.combat_ctx.resolver.dice._values = []      # any roll would raise
+
+    system._offer_opportunity_attacks(m, (1, 0), (1, 0), ctx.game, ctx)   # didn't move
+    system._offer_opportunity_attacks(m, (1, 0), (1, 1), ctx.game, ctx)   # still adjacent
+    assert m.current_damage == 0

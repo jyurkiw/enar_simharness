@@ -50,7 +50,7 @@ ACTION_EFFECTS = frozenset({
     "attach_condition", "remove_condition", "require_save", "set_flag", "end_trial",
     "emit_light", "limited_darkvision", "darkvision_immunity",
     "redirect_attack", "swap_positions", "damage_rider",
-    "reduce_damage", "mark_turn",
+    "reduce_damage", "mark_turn", "make_attack",
 })
 
 ALL_EFFECTS = ACTION_EFFECTS
@@ -238,6 +238,18 @@ def _damage_rider(args: dict, scope: EffectScope) -> None:
     scope.ctx.deal(scope.source, scope.target, amount, args.get("name", "rider"), args.get("damage_type"))
 
 
+def _make_attack(args: dict, scope: EffectScope) -> None:
+    """Resolve one of the source's own abilities as a reaction — the Opportunity
+    Attack (design doc 07): `enemy_left_reach` fires, and the reactor swings its
+    named weapon at whoever is leaving. Lazily imports `actions` (which imports
+    this module) to keep the dependency one-directional at import time."""
+    from .actions import _resolve_attack
+    ability = scope.source.statblock.abilities.get(args["ability"])
+    if ability is None or scope.target is None or scope.target.is_down:
+        return
+    _resolve_attack(scope.ctx, scope.source, ability, scope.target)
+
+
 def _reduce_damage(args: dict, scope: EffectScope) -> None:
     """Reaction-only (design doc 04 section 4's `taking_damage` trigger):
     multiply the pending attack's damage by `factor` (0.5 = halve). Writes to
@@ -268,5 +280,6 @@ _DISPATCH: dict[str, Callable[[dict, EffectScope], None]] = {
     "swap_positions": _swap_positions,
     "damage_rider": _damage_rider,
     "reduce_damage": _reduce_damage,
+    "make_attack": _make_attack,
     "mark_turn": _mark_turn,
 }

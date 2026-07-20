@@ -49,5 +49,14 @@ targets = "enemies"   # a mundane weapon attack doesn't need sight — see heade
 actions = ["longsword", "longsword"]
 priority = 0
 
+# Opportunity Attack (design doc 07): when an enemy walks out of this
+# creature's reach, take a swing with its melee weapon. `uses_reaction` gives
+# the RAW one-per-round limit for free. This is what the shadow sims'
+# `killed_on_retreat` column measures - parting shots on a fleeing monster.
+[reactions.opportunity_attack]
+trigger = "enemy_left_reach"
+uses_reaction = true
+effects = [ { effect = "make_attack", ability = "longsword" } ]
+
 [behavior]
 tactic = "engage"

@@ -29,12 +29,15 @@
 #     from X" primitive) -> `dnd5e_behaviors.shadow_otyugh.ShadowOtyughBrain.
 #     plan_movement`, the ONLY hook that class implements.
 #
-# DELIBERATE, PRE-REGISTERED SCOPE CUT: the bloodied retreat's "every melee
-# engager gets a parting attack of opportunity" needs Phase 5's reaction bus
-# (opportunity attacks aren't wired at all yet) — `end_trial`'s outcome here
-# is just `{retreated = 1}`, no `killed_on_retreat` (the old column would be
-# trivially always 0 without parting shots, so it's omitted rather than kept
-# as a meaningless always-0 column). `_hunt_light_source`'s "free a tentacle
+# RESTORED (design doc 07): the bloodied retreat's "every melee engager gets a
+# parting attack of opportunity" now works — opportunity attacks are wired
+# (`enemy_left_reach` is published by `system._offer_opportunity_attacks` when a
+# creature walks out of an adjacent enemy's reach, and the party's melee
+# characters carry an `[reactions.opportunity_attack]` that swings via the
+# `make_attack` effect). Because movement — and therefore the parting shots —
+# resolve BEFORE the `flee` ability itself, the otyugh can already be Down by
+# the time `flee` runs, which is exactly the old `killed_on_retreat` column:
+# the two `end_trial` variants below split on `is_down(self)` to record it. `_hunt_light_source`'s "free a tentacle
 # by releasing an already-poisoned captive when both are occupied" also has
 # no hook to hang a side-effecting grapple-release off of; `hunt_light` here
 # uses whatever capacity the otyugh already has free (bite always lands on
@@ -111,7 +114,13 @@ on_hit = [ { effect = "attach_condition", condition = "grappled", escape_dc = 13
 [abilities.flee]
 kind = "utility"
 targets = "self"
-effects = [ { effect = "end_trial", outcome = { retreated = 1 } } ]
+# Parting shots (opportunity attacks) resolve during this turn's movement, i.e.
+# BEFORE this ability — so a retreat that got the otyugh killed on the way out
+# is distinguishable here from a clean escape.
+effects = [
+  { effect = "end_trial", outcome = { retreated = 1, killed_on_retreat = 1 }, when = "is_down(self)" },
+  { effect = "end_trial", outcome = { retreated = 1 }, when = "not is_down(self)" },
+]
 
 [multiattack.retreat]
 actions = ["flee"]

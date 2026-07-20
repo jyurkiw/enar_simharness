@@ -80,11 +80,11 @@ rerolls, and ki-spend depletion remain cut (small, within tolerance for ≤3-rou
   up, and deals ~+31%. **Expected board divergence, decided closed** — same call as Bug C
   and the parity note at the top of this doc: kiting is a valid tactic the abstract baseline
   couldn't represent. Not a bug; do not re-open.
-- **Shadow sims** (`otyugh_shadow_solo/pair/board`: −36%/+10%/+62%) — all improved from the
-  party rebuild (board was +142% pre-rebuild) but remain out of tolerance because of the
-  **shadow otyugh's own darkness/blindness dynamics** (the party fights blinded → disadvantage,
-  so the shadow otyugh's survival/damage interacts differently than a plain otyugh's). A
-  separate investigation, starting at the obscurement/vision interaction, not the party TOMLs.
+- **Shadow sims** — investigated; a **real engine bug** was found there and fixed (a ranged
+  attack on an unseen target was an automatic miss instead of disadvantage — see the shadow
+  section below). After that fix and opportunity attacks they sit at −38%/−35%/−19%: the
+  monster side now *under*shoots, driven by the same accepted board effects (kiting, and
+  sight-gated spells that genuinely can't fire into geometric darkness). Not re-opened.
 - `poisoned_otyugh` still undershoots (~0.48 vs baseline 0.92) — see Bug B.
 
 ---
@@ -98,15 +98,15 @@ fixing Bug A (the two are the same root cause). `thief_rogue.toml` now has Sneak
 `dealt_thief_rogue` −25% → **−3%**, `taken_thief_rogue` +219% → **+16%**. Bug B's damage
 side is closed.
 
-**Remaining, and now known to be irreducible:** `poisoned_<monster>` still undershoots
-(~0.48 vs baseline ~0.92). The rogue's poison is modeled as a DC-15 CON save on the sneak
-hit; the otyugh's good CON save (+7) means it resists ~65% of the time, so over ~2-3 rogue
-turns it ends up poisoned ~48%, not 92%. The old engine clearly applied poison far more
-reliably (lower DC, no save, or more attempts via its exact alternating poison/trip
-Cunning Strike logic), but **that logic is unrecoverable** — the old engine is deleted.
-Since `poisoned` is a purely cosmetic marker (no roll effect in either engine — see
-`conditions.py`), this column will stay a documented cosmetic miss rather than be
-force-fit by distorting the save. Not worth further chasing.
+**`poisoned_<monster>` — CLOSED as correct-as-is, not a defect.** It undershoots (~0.48 vs
+baseline ~0.92) because the rogue's poison is modeled the RAW 2024 way: Cunning Strike
+(Poison) forces a CON save (DC 15), and the otyugh's +7 CON resists ~65% of the time, so
+over ~2-3 rogue turns it lands ~48%. The old engine evidently applied poison far more
+reliably (no save, a lower DC, or more attempts via its exact alternating poison/trip
+logic) — **that logic is unrecoverable**, the engine is deleted. Per the parity note at
+the top of this doc, a RAW-correct model is not "fixed" toward a less faithful baseline,
+especially when `poisoned` is a purely cosmetic marker with no roll effect in either
+engine (see `conditions.py`). Do not force-fit this by distorting the save DC.
 
 The sneak die is 2d6 (not the full 3d6) as a stand-in for the 2024 Cunning Strike
 dice-for-effect trade; with 3d6 `dealt_thief_rogue` overshot (+17%), so 2d6 is the tuned
@@ -222,17 +222,59 @@ capable than the single-`it` slot suggests.
 
 ---
 
-## Lower-priority, smaller cuts (not expected to matter much, but recorded)
+## Shadow sims — one real bug fixed, rest is expected divergence — CLOSED
 
-- **`killed_on_retreat` (shadow otyugh sims)**: an opportunity-attack/parting-shot on a
-  fleeing creature. Documented cut since Phase 4, deferred because it needed Phase 5's
-  reaction bus — that bus now exists (`enemy_left_reach` is in `conditions.
-  REACTION_TRIGGERS` already) but **nothing publishes it yet** (`reactions.py`'s own
-  docstring: only `ally_targeted_by_attack`/`self_targeted_by_attack`/`turn_start` are
-  wired). Implementing this needs a publish point in `movement.py` or wherever a
-  creature's position changes relative to an adjacent enemy, then the shadow otyugh
-  sims' own `retreated`/`killed_on_retreat` columns would need re-checking.
+**A genuine engine bug, found here and fixed:** a ranged attack against a target the
+attacker **could not see was an automatic miss** — the attack was discarded before any
+roll. RAW (and by the very principle doc 06's Gotcha #6 already applied to the *targeting*
+pool: "Blinded imposes disadvantage, not an inability to attack") an unseen target should
+impose **disadvantage**. The gate had been fixed for target *selection* in Phase 4 but
+never carried through to attack *resolution*. Effect: in the darkness sims the ranger
+kites outside the dark and shoots into it, so *every* shot was thrown away — it dealt
+**−85%** vs baseline in `otyugh_shadow_board`, **−61%** in `_pair`, but a healthy **+3%**
+in `_solo`, which is the sim that has no darkness aura at all. That contrast is what
+identified it. Fixed in `actions.attack`; full cover remains a true auto-miss (there is
+no line to the target). Result: `shadow_board`'s ranger went **−85% → +5%** and its
+monster damage **+67% → −17%**.
+
+**`killed_on_retreat` — implemented.** Opportunity attacks now exist: `system.
+_offer_opportunity_attacks` publishes `enemy_left_reach` to every enemy whose reach a
+mover just left, and the party's melee characters carry an `[reactions.opportunity_attack]`
+that swings via the new **`make_attack`** effect (resolve one of the source's own abilities
+as a reaction). Because movement — and so the parting shots — resolve *before* the `flee`
+ability, `shadow_otyugh.toml` can split its `end_trial` on `is_down(self)` to record the
+column. `otyugh_shadow_solo` now matches baseline **exactly (0.07 vs 0.07)**. It stays 0 in
+`_pair`/`_board`, where darkness scatters the party so fewer melee are adjacent to
+provoke — accepted divergence, not a wiring fault.
+
+**Where the shadow sims land:** monster damage −38%/−35%/−19% (all now *under*). Drivers are
+the accepted ones: kiting, and sight-gated spells that genuinely cannot fire into geometric
+darkness (the wizard is −33%/−40%, which is *correct* — a spell that needs to see its target
+can't be cast into the dark; the old abstract engine had no geometry and always had a
+target). Not re-opened.
+
+## Lower-priority, smaller cuts (not expected to matter much, but recorded)
 - Poet's `tactic = "kite"` is a looser approximation of the old policy's "step away only
   if an enemy has closed within 15 ft" (kite re-maximizes distance from its own target
   every turn, not distance from the nearest threat specifically) — flagged in
-  `masked_poet.toml`'s header, likely a minor contributor to Bug C at most.
+  `masked_poet.toml`'s header. Now understood as part of the accepted kiting divergence.
+- Opportunity attacks are currently declared only by the **party** creature files, so
+  monsters don't take them. That's asymmetric vs RAW (everyone gets OAs) and is why a
+  kiting ranger never provokes. Deliberate: it's what `killed_on_retreat` needed, and
+  giving every monster an OA would tax kiting — a live, valid tactic (see the parity note
+  at the top). Add `[reactions.opportunity_attack]` to a monster file if a future sim wants
+  it; the engine side is general and already published for both sides.
+- Great Weapon Master crit-chains, Great Weapon Fighting rerolls, and ki-spend depletion
+  (there is still no `spend_resource` effect) remain unimplemented — all small for
+  <=3-round fights, noted in the relevant creature files.
+
+---
+
+## Backlog status
+
+Everything originally listed here is now closed. Bugs A, B and C were real defects and
+are fixed; Gaps D and E are implemented; the shadow sims yielded one more real bug (the
+unseen-target auto-miss) which is fixed. What remains recorded above is **expected
+board-vs-abstract divergence** (kiting, geometric darkness) plus small documented cuts —
+none of it should be re-opened as a bug without new evidence. Re-read the parity note at
+the top before treating any baseline mismatch as a defect.

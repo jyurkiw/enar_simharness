@@ -269,6 +269,39 @@ def test_full_cover_auto_misses(tmp_path):
     assert out.hit is False
 
 
+def test_unseen_ranged_target_imposes_disadvantage_not_auto_miss(tmp_path):
+    """Design doc 07 (shadow-sim fix): a ranged attack on a target it cannot see
+    is DISADVANTAGE, not a discarded attack — the same RAW principle doc 06's
+    Gotcha #6 applied to targeting ("Blinded imposes disadvantage, not an
+    inability to attack"), now carried through to attack resolution. Auto-missing
+    here had reduced the ranger to ~15% of its damage in the darkness sims."""
+    from dnd_board import ObscurementField, Region
+    board = make_board(tmp_path, RANGED_BOARD, "ranged")
+    a = make_creature("archer", "party", 0, 0)
+    b = make_creature("otyugh", "monsters", 10, 0)     # 50 ft off, inside the dark
+    obsc = ObscurementField(cell_feet=5,
+                            regions=[Region(center=(10, 0), radius_ft=10, kind="darkness")])
+    bf = Battlefield([a, b], board=board, obscurement=obsc)
+    ledger = Ledger(names=["archer", "otyugh"], side_of={"archer": "party", "otyugh": "monsters"})
+    ctx = CombatContext(Resolver(ScriptedDice([18, 17, 6])), bf, ledger)
+
+    assert bf.can_see(a, b) is False
+    out = ctx.attack(a, b, bonus=7, damage="1d8+4", normal_range=150, long_range=600)
+    assert out.hit is True        # rolled at disadvantage (min(18,17)=17, +7 >= ac 14)
+    assert out.damage == 6        # and it actually reached the damage roll
+
+
+def test_full_cover_still_auto_misses_even_though_unseen_does_not(tmp_path):
+    """Full cover is a different thing from "can't see": there is no line to the
+    target at all, so it stays an automatic miss (no dice consumed)."""
+    board = make_board(tmp_path, WALL_BOARD, "wall")
+    a = make_creature("archer", "party", 0, 1)
+    b = make_creature("otyugh", "monsters", 19, 1)
+    ctx, _, _ = make_ctx(board, [], [a, b])           # empty dice: must not roll
+    out = ctx.attack(a, b, bonus=7, damage="1d8+4", normal_range=150, long_range=600)
+    assert out.hit is False
+
+
 def test_three_quarters_cover_adds_ac_bonus(tmp_path):
     board = make_board(tmp_path, COVER_BOARD, "cover")
     a = make_creature("archer", "party", 0, 1)
