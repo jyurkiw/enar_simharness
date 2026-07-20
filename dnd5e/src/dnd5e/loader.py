@@ -65,14 +65,34 @@ def load_toml_file(path: str | Path) -> dict:
         return tomllib.load(f)
 
 
-_EFFECT_TARGET_REFS = ("self", "target")  # or "event.<field>" — see effects._resolve_ref
+# Effect-call arguments that name a *creature* (see effects._resolve_ref).
+_EFFECT_TARGET_KEYS = ("target", "to", "with")
+_EFFECT_TARGET_REFS = ("self", "target")  # or "event.<field>" / "expr:<expression>"
 
 
-def _validate_target_ref(ref: str, *, where: str) -> None:
-    if ref in _EFFECT_TARGET_REFS or ref.startswith("event."):
-        return
-    raise ValueError(f"{where}: {ref!r} is not a valid target reference "
-                     f"(expected 'self', 'target', or 'event.<field>')")
+def _compile_target_ref(value, *, where: str):
+    """Compile an effect-call creature reference. Four forms:
+    `"self"` / `"target"` / `"event.<field>"` (fixed lookups resolved directly
+    by `effects._resolve_ref`), and `"expr:<expression>"` — an escape into the
+    normal expression language for references the fixed forms can't name (e.g.
+    the Masked Bruiser's Sleight of Crowd swapping with a *Poet ally*, which is
+    neither self, the target, nor an event field). The expr form is parsed and
+    validated here, at load time, like every other expression in this loader,
+    and stored as a compiled `Node`; a non-str value is already compiled."""
+    if not isinstance(value, str):
+        return value
+    if value.startswith("expr:"):
+        return expressions.parse_and_validate(value[len("expr:"):], where=f"{where} (expr:)")
+    if value in _EFFECT_TARGET_REFS or value.startswith("event."):
+        return value
+    raise ValueError(f"{where}: {value!r} is not a valid target reference (expected 'self', "
+                     f"'target', 'event.<field>', or 'expr:<expression>')")
+
+
+def _validate_target_ref(ref, *, where: str) -> None:
+    """Presence/shape check for refs already run through `_compile_target_ref`
+    (a compiled Node passes trivially)."""
+    _compile_target_ref(ref, where=where)
 
 
 def _build_effect_calls(raw_list: Optional[list], *, where: str,
@@ -89,8 +109,11 @@ def _build_effect_calls(raw_list: Optional[list], *, where: str,
         # `effects.apply_effect` against the acting creature/target/event.
         if "when" in raw:
             raw["when"] = expressions.parse_and_validate(raw["when"], where=f"{item_where}.when")
-        if "target" in raw:
-            _validate_target_ref(raw["target"], where=f"{item_where}.target")
+        # Creature-reference args (`target`/`to`/`with`) are compiled here, so an
+        # `expr:` form is parsed+validated once at load time rather than per hit.
+        for key in _EFFECT_TARGET_KEYS:
+            if key in raw:
+                raw[key] = _compile_target_ref(raw[key], where=f"{item_where}.{key}")
         call = EffectCall.from_dict(raw)
         _validate_effect_args(call, where=item_where, known_conditions=known_conditions)
         calls.append(call)

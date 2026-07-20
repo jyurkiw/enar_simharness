@@ -171,35 +171,54 @@ why): `design/06-implementation-guide.md`'s Phase 5 section, and `masked_bruiser
 
 ---
 
-## Gap D — Sleight of Crowd (masks Bruiser bonus action) isn't implemented at all
+## Gap D — Sleight of Crowd (masks Bruiser bonus action) — CLOSED
 
-**Symptom:** the Bruiser never repositions to shield a threatened Poet. Pure
-positioning, no direct damage/hit-rate effect, so it's a lower-priority gap than A-C.
+**Was:** the Bruiser never repositioned to shield a threatened Poet, because
+`swap_positions`'s `with` only resolved `"self"` / `"target"` / `"event.<field>"` —
+none of which can name "a Poet ally".
 
-**Why it's not just a TOML omission:** `swap_positions`'s `with` field only resolves
-`"self"` / `"target"` / `"event.<field>"` (`effects._resolve_ref`) — there's no way to
-say "swap with the first ally tagged 'poet'". A real fix needs one of:
-- Extend `_resolve_ref`/`loader._validate_target_ref` to accept a 4th form, e.g.
-  `"expr:<selector>"`, evaluated via the same `_effect_when_scope` machinery already
-  used for effect-call `when` clauses (parse at load time like every other `when`, not
-  per-dispatch). This is the more general fix and would also unblock Gap E below.
-- Or something narrower/uglier specific to masks (not recommended — the whole point of
-  the effect-ref vocabulary is staying game-agnostic).
+**Closed (2026-07)** by adding a general fourth creature-reference form,
+**`"expr:<expression>"`**, to every effect argument that names a creature
+(`target`/`to`/`with`). `loader._compile_target_ref` parses and validates it at load
+time like every other expression (so a typo fails loudly at load, never mid-trial) and
+stores a compiled `Node`; `effects._resolve_ref` evaluates it against the effect's
+scope. An `expr:` reference may legitimately resolve to `None` (nothing matched), so
+`swap_positions`/`redirect_attack` now no-op in that case rather than crashing.
 
-## Gap E — the Bruiser's "don't move an already-well-placed mark" heuristic is cut
+`masked_bruiser.toml` now carries `[reactions.sleight_of_crowd]` (trigger `turn_start`,
+`uses_bonus_action`), gated on the old policy's own test — the nearest Poet is within
+30 ft *and* has an enemy within 10 ft — swapping via
+`with = "expr:nearest(allies_tagged('poet'))"`. It fires rarely in practice (~0.011/trial):
+the Poets kite well and are seldom threatened, which is the same accepted board-kiting
+effect as Bug C, not a wiring problem. Pure repositioning, so it barely moves the sim's
+numbers — the point is that the vocabulary no longer blocks it.
 
-**Symptom:** the Bruiser's own Cruel Rapier hit may re-attach the Mark to its current
-attack target even when the Mark is already sitting on a Hector-reachable striker
-elsewhere (harmless in the common case — the Bruiser usually attacks the same target
-turn over turn, so re-attaching is a same-name no-op — but diverges when Deceptive
-Defense marks a different ally moments before the Bruiser's own attack lands).
+## Gap E — the Bruiser's "don't move an already-well-placed mark" heuristic — CLOSED
+(and the Phase 5 reasoning that cut it was **wrong**)
 
-**Why it's not a TOML omission:** would need two *independently* nested `any()` calls
-in one expression (one iterating currently-marked enemies, one iterating Hector allies)
-— the expression language's `it` binding is a single slot per `ConcreteScope`, so a
-second `any()` inside the first clobbers it. Not fixable by better TOML authoring;
-needs either a grammar extension (a second loop variable, e.g. `any2`/nested-`it`
-support) or accepting this as permanent.
+**Was:** recorded as inexpressible because it "would need two *independently* nested
+`any()` calls, and the `it` binding is a single slot, so a second `any()` inside the
+first clobbers it."
+
+**That reasoning was incorrect.** `any()`/`all()` evaluate their **set argument in the
+enclosing scope, before rebinding `it`** (see `expressions._eval_call` — `creatures =
+evaluate(node.args[0], scope)` happens first, then the predicate runs against
+`scope.with_it(c)`). So the outer `it` is still bound while the inner set is built, and
+
+    any(allies_tagged('hector'), any(enemies_within_of(it, 35), has_condition(it, 'marked')))
+
+works today with **no engine change** — outer `it` is the hector when
+`enemies_within_of(it, 35)` is evaluated, inner `it` is the enemy in the predicate.
+Locked in by `test_nested_any_keeps_the_outer_it_while_building_the_inner_set`.
+
+`masked_bruiser.toml`'s rapier mark now carries that guard, and it measurably does its
+job: mark applications drop from **1.472 to 1.087 per trial** (−26% churn) versus the
+un-guarded condition — i.e. the Bruiser stops moving a mark that is already sitting on a
+Hector-reachable striker, exactly as the old policy did.
+
+**Lesson worth keeping:** before recording something as "the expression language can't
+express this", check the evaluator — nested set-comprehension-ish queries are more
+capable than the single-`it` slot suggests.
 
 ---
 

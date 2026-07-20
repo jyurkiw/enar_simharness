@@ -488,3 +488,33 @@ def test_downed_allies_selector_sees_the_dying_that_allies_excludes(tmp_path):
     hurt.current_damage = 999            # now Down
     assert scope.allies() == []                                   # allies_of hides it
     assert [c.instance_name for c in scope.downed_allies()] == ["rogue"]
+
+
+def test_nested_any_keeps_the_outer_it_while_building_the_inner_set(tmp_path):
+    """A nested `any()` DOES work: `any()` evaluates its set argument in the
+    enclosing scope *before* rebinding `it`, so the outer `it` is still bound
+    while the inner set is built. Phase 5 wrongly recorded this as impossible
+    (design doc 07 Gap E) and cut the Bruiser's mark heuristic over it — this
+    locks the behavior in."""
+    from dnd5e.behavior import ConcreteScope
+    from dnd5e.creature import ConditionInstance
+    board = make_board(tmp_path)
+    bruiser = make_creature("bruiser", "monsters", 0, 0)
+    hector = make_creature("hector", "monsters", 10, 0)
+    hector.tags = ("hector",)
+    near = make_creature("near", "party", 12, 0)      # 10 ft from the hector
+    far = make_creature("far", "party", 25, 0)        # well out of its reach
+    near.tags = far.tags = ("priority_strike",)
+    bf = Battlefield([bruiser, hector, near, far], board=board)
+    scope = ConcreteScope(make_ctx(bf), bruiser)
+    node = expr("any(allies_tagged('hector'), any(enemies_within_of(it, 35),"
+                " has_condition(it, 'marked') and has_tag(it, 'priority_strike')))")
+
+    assert expressions.evaluate(node, scope) is False       # nothing marked yet
+
+    far.add_condition(ConditionInstance(name="marked", source="bruiser"))
+    assert expressions.evaluate(node, scope) is False       # marked, but no hector near it
+
+    far.remove_condition("marked")
+    near.add_condition(ConditionInstance(name="marked", source="bruiser"))
+    assert expressions.evaluate(node, scope) is True        # marked AND hector-reachable

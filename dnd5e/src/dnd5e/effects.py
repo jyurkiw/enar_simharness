@@ -76,13 +76,18 @@ def validate_effect_name(name: str, *, where: str) -> None:
         raise ValueError(f"{where}: unknown effect {name!r}; known effects: {sorted(ALL_EFFECTS)}")
 
 
-def _resolve_ref(ref: str, scope: EffectScope) -> "Creature":
+def _resolve_ref(ref, scope: EffectScope) -> "Creature":
     """Resolve an effect-call `target`/`to`/`with` reference: `"self"` (the
     effect's source — the acting/reacting creature), `"target"` (the effect's
-    default target), or `"event.<field>"` (a triggering-event binding, e.g.
-    `event.attacker`). Not the full expression language — effects.py only
-    ever needs these three fixed forms (see loader.py's `_validate_target_
-    ref`, which enforces exactly this at load time)."""
+    default target), `"event.<field>"` (a triggering-event binding, e.g.
+    `event.attacker`), or a **compiled expression** — the `"expr:<expression>"`
+    form, already parsed by `loader._compile_target_ref`, for references the
+    fixed forms can't name (the Bruiser's Sleight of Crowd swaps with a *Poet
+    ally*). An expression may legitimately resolve to `None` (nothing matched);
+    callers must tolerate that."""
+    if not isinstance(ref, str):
+        from . import expressions
+        return expressions.evaluate(ref, _effect_when_scope(scope))
     if ref == "self":
         return scope.source
     if ref == "target":
@@ -210,11 +215,17 @@ def _redirect_attack(args: dict, scope: EffectScope) -> None:
     `actions.attack` calls the reaction bus *before* any roll, then reads
     `CombatContext`'s pending-redirect back — this just records the new
     target, it doesn't touch the roll itself."""
-    scope.ctx.set_pending_redirect(_resolve_ref(args["to"], scope))
+    to = _resolve_ref(args["to"], scope)
+    if to is not None:
+        scope.ctx.set_pending_redirect(to)
 
 
 def _swap_positions(args: dict, scope: EffectScope) -> None:
-    scope.ctx.swap_positions(scope.source, _resolve_ref(args["with"], scope))
+    # An `expr:` reference can resolve to nothing (no matching ally) — then
+    # there is simply no one to swap with.
+    other = _resolve_ref(args["with"], scope)
+    if other is not None:
+        scope.ctx.swap_positions(scope.source, other)
 
 
 def _damage_rider(args: dict, scope: EffectScope) -> None:

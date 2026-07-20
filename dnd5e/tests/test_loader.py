@@ -289,6 +289,22 @@ def test_effect_call_target_ref_invalid_raises(tmp_path):
         load_creature(write(tmp_path, "x", body))
 
 
+def test_expr_creature_reference_compiles_to_a_node(tmp_path):
+    from dnd5e import expressions
+    body = (f'name = "x"\n{MINIMAL_STATS}\n[reactions.shuffle]\ntrigger = "turn_start"\n'
+            'effects = [ { effect = "swap_positions", with = "expr:nearest(allies_tagged(\'poet\'))" } ]\n')
+    sb = load_creature(write(tmp_path, "x", body))
+    ref = sb.reactions["shuffle"].effects[0].args["with"]
+    assert isinstance(ref, expressions.Node)   # compiled at load, not left a raw string
+
+
+def test_expr_creature_reference_validates_identifiers_at_load(tmp_path):
+    body = (f'name = "x"\n{MINIMAL_STATS}\n[reactions.shuffle]\ntrigger = "turn_start"\n'
+            'effects = [ { effect = "swap_positions", with = "expr:nearest(bogus_selector)" } ]\n')
+    with pytest.raises(Exception):
+        load_creature(write(tmp_path, "x", body))
+
+
 def test_attach_condition_accepts_expires_clock(tmp_path):
     body = (f'name = "x"\n{MINIMAL_STATS}\n[abilities.strike]\nkind = "attack"\nto_hit=5\ndamage="1d6"\n'
             'on_hit = [ { effect = "attach_condition", condition = "stunned", expires = "start_of_source_next_turn" } ]\n')

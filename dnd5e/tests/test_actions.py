@@ -147,6 +147,38 @@ def test_grant_self_advantage_condition_gives_attacker_advantage(tmp_path):
     assert out.hit is True  # 18 >= ac 14: advantage kept the high roll
 
 
+def test_swap_positions_with_expr_reference_swaps_with_the_matched_ally(tmp_path):
+    """Gap D (design doc 07): `expr:` lets an effect name a creature the fixed
+    forms can't — here a Poet ally, for the Bruiser's Sleight of Crowd."""
+    from dnd5e import expressions
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    sb = Statblock(name="x", display_name="x", classification={}, stats=make_stats())
+    bruiser = Creature(statblock=sb, instance_name="bruiser", side="monsters")
+    bruiser.place(0, 0)
+    poet = Creature(statblock=sb, instance_name="poet", side="monsters", tags=("poet",))
+    poet.place(5, 0)
+    ctx, _, _ = make_ctx(board, [], [bruiser, poet])
+    node = expressions.parse_and_validate("nearest(allies_tagged('poet'))", where="t")
+    apply_effect(EffectCall(effect="swap_positions", args={"with": node}),
+                 EffectScope(ctx=ctx, source=bruiser, target=bruiser))
+    assert bruiser.coord == (5, 0) and poet.coord == (0, 0)
+
+
+def test_swap_positions_with_expr_matching_nothing_is_a_noop(tmp_path):
+    """An `expr:` reference may legitimately resolve to None (no such ally);
+    the effect must no-op rather than blow up."""
+    from dnd5e import expressions
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    sb = Statblock(name="x", display_name="x", classification={}, stats=make_stats())
+    bruiser = Creature(statblock=sb, instance_name="bruiser", side="monsters")
+    bruiser.place(0, 0)
+    ctx, _, _ = make_ctx(board, [], [bruiser])
+    node = expressions.parse_and_validate("nearest(allies_tagged('poet'))", where="t")
+    apply_effect(EffectCall(effect="swap_positions", args={"with": node}),
+                 EffectScope(ctx=ctx, source=bruiser, target=bruiser))
+    assert bruiser.coord == (0, 0)
+
+
 def test_attach_condition_with_expires_sets_the_instance_clock(tmp_path):
     """Timed RAW condition (design doc 07, Bug A): the Monk's Stunning Strike
     attaches `stunned` with an explicit `expires` clock even though `stunned`

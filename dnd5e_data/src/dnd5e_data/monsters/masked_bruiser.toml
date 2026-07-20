@@ -25,23 +25,22 @@
 # hector_a/hector_b `tags = ["hector"]` and ranger/rogue `tags =
 # ["priority_strike"]` (see sims/masks/simulation.toml).
 #
-# PRE-REGISTERED SCOPE CUT (parity escalation rule, design doc 06): the old
-# policy also (a) prefers NOT moving an already well-placed mark to a new
-# target on its own attack (`_mark_exploitable`) — the expression language
-# has no way to test "is there a currently-marked enemy AND is IT separately
-# near a hector" (two independent `any()` iterations can't nest, each `it`
-# rebind is a single slot) without an escape hatch; since the Bruiser
-# ordinarily attacks one target per turn, re-marking that same target is a
-# same-name no-op in practice, so this mostly affects the rare case where
-# Deceptive Defense marks a different ally than the Bruiser's own attack
-# target moments later — and (b) Sleight of Crowd (bonus action: swap places
-# with a threatened Poet) needs a "swap with the first poet ally" reference
-# the `swap_positions` effect's `with` field can't express (only "self" /
-# "target" / "event.<field>", no tag/selector lookup) — pure repositioning,
-# no damage/hit-rate effect, cut rather than extending the effect-ref
-# grammar under a deadline. Both are candidates for a small `expr:<selector>`
-# extension to `effects._resolve_ref` if measured parity (Task #70) needs
-# them.
+# GAPS D & E CLOSED (design doc 07): both of the Phase 5 cuts below are now
+# implemented, and one of them was never actually blocked.
+#   * Gap E — "don't move an already well-placed mark" (`_mark_exploitable`).
+#     Phase 5 recorded this as inexpressible because "two `any()` iterations
+#     can't nest, each `it` rebind is a single slot." **That was wrong.**
+#     `any()` evaluates its SET argument in the enclosing scope *before*
+#     rebinding `it`, so the outer `it` survives long enough to build the inner
+#     set — `any(hectors, any(enemies_within_of(it, 35), ...))` works today with
+#     no engine change. The rapier's mark now carries that guard.
+#   * Gap D — Sleight of Crowd (swap places with a threatened Poet). This one
+#     was genuinely blocked: `swap_positions`'s `with` only accepted "self" /
+#     "target" / "event.<field>", none of which can name "a Poet ally". Closed
+#     by the new `expr:<expression>` creature-reference form (loader.
+#     `_compile_target_ref` parses it at load time; `effects._resolve_ref`
+#     evaluates it), which is general — any effect's `target`/`to`/`with` can
+#     now name a creature via the expression language.
 name = "masked_bruiser"
 display_name = "Masked Bruiser"
 
@@ -80,7 +79,11 @@ to_hit = 6
 damage = "1d8+4"
 damage_type = "piercing"
 on_hit = [
-  { effect = "attach_condition", condition = "marked", when = "has_tag(target, 'priority_strike') and any(allies_tagged('hector'), distance(it, target) <= 35)" },
+  # Mark a Hector-reachable priority striker — but NOT if this Bruiser's mark is
+  # already well placed (Gap E: an enemy that is already marked AND is itself
+  # within a Hector's reach). The nested `any` works because the inner set,
+  # `enemies_within_of(it, 35)`, is evaluated while `it` is still the hector.
+  { effect = "attach_condition", condition = "marked", when = "has_tag(target, 'priority_strike') and any(allies_tagged('hector'), distance(it, target) <= 35) and not any(allies_tagged('hector'), any(enemies_within_of(it, 35), has_condition(it, 'marked') and has_tag(it, 'priority_strike')))" },
 ]
 
 [multiattack.standard]
@@ -102,6 +105,19 @@ effects = [
   { effect = "redirect_attack", to = "self" },
   { effect = "attach_condition", condition = "marked", target = "event.attacker", when = "has_tag(event.attacker, 'priority_strike') and any(allies_tagged('hector'), distance(it, event.attacker) <= 35)" },
 ]
+
+# Sleight of Crowd (Gap D): a bonus action at the start of its own turn —
+# swap places with a Poet ally that an enemy has closed on, putting the Bruiser
+# between the threat and the fragile generator. Fires only when the nearest Poet
+# is within 30 ft AND has an enemy within 10 ft of it (the old policy's
+# "threatened" test). The `expr:` reference is what makes this expressible at
+# all: the swap partner is a Poet ally, which "self"/"target"/"event.<field>"
+# cannot name. Pure repositioning — no damage or hit-rate effect of its own.
+[reactions.sleight_of_crowd]
+trigger = "turn_start"
+when = "self == event.actor and count(allies_tagged('poet')) > 0 and distance(self, nearest(allies_tagged('poet'))) <= 30 and count(enemies_within_of(nearest(allies_tagged('poet')), 10)) > 0"
+uses_bonus_action = true
+effects = [ { effect = "swap_positions", with = "expr:nearest(allies_tagged('poet'))" } ]
 
 [behavior]
 tactic = "engage"
