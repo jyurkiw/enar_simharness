@@ -132,3 +132,19 @@ columns = ["side_dealt_party", "side_dealt_monsters", "wiped_party", "wiped_mons
 
 [output]
 report = ["totals", "by_combatant"]
+
+# PARITY STATUS (2026-07, after the Bug A/B/C work — see design/07-known-issues.md):
+# Most of the original masks gap was downstream of the party's missing class
+# features and is now closed: down_thief_rogue was ~7x baseline (0.6-0.7 vs
+# 0.09) and is now ~0.12, and the monster side no longer overshoots. One real
+# bug was found and fixed here: the Life Cleric's `cure_wounds` was defined but
+# unreachable AND untargeted (it would have healed a monster) — see
+# life_cleric.toml.
+#
+# The remaining divergence is DELIBERATE and will not be "fixed": on this
+# 30x30 arena the ranger's `kite` tactic holds it at longbow range all fight, so
+# it's almost never targeted (hit ~1.05 times per 8-round trial), keeps Hunter's
+# Mark up, and deals ~+32% vs baseline — which drags the monster side to ~-42%.
+# Kiting is a powerful, valid tactic that the OLD ABSTRACT engine (no board, no
+# positioning) structurally could not represent, so its baseline is simply lower.
+# Treat these baselines as historical, not as a target. Do not re-open.

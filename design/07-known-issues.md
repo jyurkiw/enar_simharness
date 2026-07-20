@@ -11,6 +11,18 @@ Each entry: what's wrong, where it shows up, current best theory, and what a fix
 touch. Ordered roughly by how many sims it taints (fix the top ones first — several of
 the sim-level "FAILs" below are actually the same root cause reappearing).
 
+> **Parity is a migration-validation tool, not ground truth.** The baselines were captured
+> from the old *abstract* engine (no board, front/back positioning only). Where the new
+> board-based engine models something the old one structurally could not, a divergence is
+> **expected and correct** — the new engine is the better model and the baseline is simply
+> unable to represent the situation. **Kiting is the standing example** (decided 2026-07):
+> a ranged attacker that keeps its distance on a real board is a powerful, legitimate
+> tactic; the abstract engine had no way to express it, so its numbers are lower. Do not
+> "fix" the engine toward the baseline in these cases, and do not re-open them as bugs —
+> see Bug A's multi-otyugh note and Bug C. Genuine bugs are the ones where the new engine
+> gets its *own* rules wrong (missing class features, an unreachable ability, a mis-aimed
+> heal) — those are what the entries below are for.
+
 ---
 
 ## Bug A — Monster damage output overshoots baseline — ROOT-CAUSED & FIXED (standard party)
@@ -63,10 +75,11 @@ rerolls, and ki-spend depletion remain cut (small, within tolerance for ≤3-rou
 
 **What's genuinely left (NOT a party-feature gap — different root causes):**
 - **Multi-otyugh standard sims *under*shoot** (`otyugh_cr5_x2`/`_monk standard_2x`, monster
-  damage ~−25%): in the longer 2-otyugh fight the ranger *kites too safely on the board*
-  (takes 10.4 dmg vs the abstract baseline's 12.5), rarely loses Concentration, keeps Hunter's
-  Mark up, and deals ~+31%. An **inherent board-vs-abstract difference** (the abstract old
-  engine had no kiting) — not distortable without unfaithfully nerfing the ranger. Accepted.
+  damage ~−25%): in the longer 2-otyugh fight the ranger kites safely on the board (takes
+  10.4 dmg vs the abstract baseline's 12.5), rarely loses Concentration, keeps Hunter's Mark
+  up, and deals ~+31%. **Expected board divergence, decided closed** — same call as Bug C
+  and the parity note at the top of this doc: kiting is a valid tactic the abstract baseline
+  couldn't represent. Not a bug; do not re-open.
 - **Shadow sims** (`otyugh_shadow_solo/pair/board`: −36%/+10%/+62%) — all improved from the
   party rebuild (board was +142% pre-rebuild) but remain out of tolerance because of the
   **shadow otyugh's own darkness/blindness dynamics** (the party fights blinded → disadvantage,
@@ -101,7 +114,7 @@ value, documented in the file header as an approximation of the (lost) exact rid
 
 ---
 
-## Bug C — masks parity — LARGELY RESOLVED, one design question left
+## Bug C — masks parity — RESOLVED (real bug fixed; the rest is expected board divergence)
 
 **Status (2026-07, after the Bug A/B party rebuild):** most of Bug C turned out to be
 downstream of Bug A/B, exactly as suspected. The original symptoms are gone or inverted:
@@ -120,32 +133,37 @@ Restored as a `triage` multiattack option (priority 40, above the Bane/Bless ope
 is_down(it))` is permanently false and a healer literally could not see who to raise —
 a trap worth remembering when writing any "help the dying" rule.
 
-**Remaining, and it's a design question, not a bug: the ranger is untouchable on a large
-board.** In masks (8 rounds, 30x30 arena) the ranger's `kite` tactic stands "as far from
-the target as possible while within weapon range" — and a 150 ft longbow range on a 150 ft
-board means *the whole board*. Measured: the ranger takes damage **1.05 times per trial
-across 8 rounds** (8.4 damage), is essentially never targeted (the monsters' nearest-first
-targeting never reaches it), keeps Hunter's Mark up the entire fight, and so deals **+32%**
-vs baseline — which in turn makes the monster side undershoot **~-42%**. It also explains
-the residual rogue pressure: the Bruiser *wants* a `priority_strike` target (ranger/rogue)
-but can never catch the ranger, so the rogue absorbs all of it.
+**The rest of the masks divergence is expected board behavior — DECIDED, do not "fix".**
+In masks (8 rounds, 30x30 arena) the ranger's `kite` tactic stands "as far from the target
+as possible while within weapon range", and a 150 ft longbow on a 150 ft board means *the
+whole board*. Measured: the ranger takes damage **1.05 times per trial across 8 rounds**
+(8.4 damage), is essentially never targeted (the monsters' nearest-first targeting never
+reaches it), keeps Hunter's Mark up the entire fight, and deals **+32%** vs baseline —
+which makes the monster side undershoot **~-42%**. It also explains the residual rogue
+pressure: the Bruiser *wants* a `priority_strike` target (ranger/rogue) but can never catch
+the ranger, so the rogue absorbs all of it.
 
-Capping the kite standoff shows how much of the sim hangs on this (2000 trials,
-adventurers_natural; baseline monsters 95.59, ranger 128.55):
+**This is kiting working as intended, not a bug** (see the parity note at the top of this
+doc). A ranged attacker holding distance on a real board is a powerful, valid tactic; the
+old *abstract* engine had no positioning and structurally could not represent it, so its
+baseline is simply lower. `kite` stays as documented in `movement.py`. For the record, a
+capped standoff was measured and rejected (2000 trials, adventurers_natural; baseline
+monsters 95.59, ranger 128.55) — it moves the numbers toward the baseline but only by
+suppressing the tactic, and still doesn't close the gap:
 
 | kite cap | monsters dealt | ranger dealt | ranger taken |
 |---|---|---|---|
-| none (150 ft, current) | 55.6 (−42%) | 169.5 (+32%) | 7.9 |
-| 60 ft | 70.4 (−26%) | 147.4 (+15%) | 28.3 |
-| 30 ft | 76.6 (−20%) | 145.5 (+13%) | 35.5 |
+| none (150 ft — **kept**) | 55.6 (−42%) | 169.5 (+32%) | 7.9 |
+| 60 ft (rejected) | 70.4 (−26%) | 147.4 (+15%) | 28.3 |
+| 30 ft (rejected) | 76.6 (−20%) | 145.5 (+13%) | 35.5 |
 
-So a capped standoff recovers a large chunk but does not fully close it — the ranger's
-riders (Hunter's Mark every hit + Colossus Slayer every turn) also simply scale better
-across an 8-round fight than the old engine's did, and the old rider logic is unrecoverable.
-**Deciding whether `kite` should mean "maximum weapon range" (current, documented in
-movement.py) or "a tactical standoff" is a design call with cross-sim blast radius** — the
-otyugh sims are unaffected only because `plain_room` is too small to kite on. Not changed
-unilaterally; this is the open item for Bug C.
+Note the residue even at a 30 ft cap: the ranger's riders (Hunter's Mark every hit +
+Colossus Slayer every turn) scale better across an 8-round fight than the old engine's did,
+and that old rider logic is unrecoverable — further evidence that chasing the baseline here
+would mean distorting a correct model to match a less capable one.
+
+**Bug C is closed.** masks will not match its Phase 0 baseline on the ranger/monster-damage
+columns, by design; treat those baselines as historical, not as a target.
 
 **Full design-decision context** (what's declarative vs. hatched, what was cut and
 why): `design/06-implementation-guide.md`'s Phase 5 section, and `masked_bruiser.toml`/
