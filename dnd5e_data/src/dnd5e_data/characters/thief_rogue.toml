@@ -52,7 +52,7 @@ kind = "attack"
 to_hit = 7
 damage = "1d4+4"
 damage_type = "piercing"
-targets = "enemies"   # a mundane weapon attack doesn't need sight — see champion_fighter.toml
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
 on_hit = [
   { effect = "damage_rider", damage = "2d6", damage_type = "piercing", name = "sneak_attack", when = "not turn_marked('sneak')" },
   { effect = "require_save", ability = "constitution", dc = 15, on_fail = [ { effect = "attach_condition", condition = "poisoned" } ], when = "not turn_marked('sneak')" },

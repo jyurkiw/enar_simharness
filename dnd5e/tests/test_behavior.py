@@ -518,3 +518,40 @@ def test_nested_any_keeps_the_outer_it_while_building_the_inner_set(tmp_path):
     far.remove_condition("marked")
     near.add_condition(ConditionInstance(name="marked", source="bruiser"))
     assert expressions.evaluate(node, scope) is True        # marked AND hector-reachable
+
+
+def test_allies_within_of_finds_pack_members_near_a_target(tmp_path):
+    """`allies_within_of(who, ft)` = living allies (not self, not Down) within
+    ft of `who` — the query behind Pack Tactics."""
+    from dnd5e.behavior import ConcreteScope
+    board = make_board(tmp_path)
+    wolf_a = make_creature("wolf_a", "monsters", 0, 0)
+    wolf_b = make_creature("wolf_b", "monsters", 2, 0)
+    wolf_c = make_creature("wolf_c", "monsters", 9, 0)   # far away
+    prey = make_creature("prey", "party", 1, 0)
+    bf = Battlefield([wolf_a, wolf_b, wolf_c, prey], board=board)
+    scope = ConcreteScope(make_ctx(bf), wolf_a)          # self = wolf_a
+
+    near = {a.instance_name for a in scope.allies_within_of(prey, 5)}
+    assert near == {"wolf_b"}                            # excludes self (wolf_a) and the far wolf_c
+
+
+def test_single_target_weapon_hits_one_enemy_not_the_whole_pack(tmp_path):
+    """Regression (design doc 07): a mundane single-target weapon must strike ONE
+    enemy even with several in reach. `requires_sight = false` skips the sight
+    filter without switching to set-mode — the old `targets = "enemies"` trick
+    hit EVERY enemy, a bug masked until a multi-enemy sim (the werewolf pack)."""
+    board = make_board(tmp_path)
+    abilities = {"sword": Ability(name="sword", kind="attack", to_hit=5, damage="1d8",
+                                  damage_type="slashing", requires_sight=False)}
+    sb = Statblock(name="fighter", display_name="fighter", classification={}, stats=make_stats(),
+                   abilities=abilities,
+                   multiattack={"m": MultiattackOption(name="m", actions=("sword",), priority=0)})
+    fighter = make_creature("fighter", "party", 0, 0, statblock=sb)
+    a = make_creature("wolf_a", "monsters", 1, 0)
+    b = make_creature("wolf_b", "monsters", 1, 1)
+    c = make_creature("wolf_c", "monsters", 0, 1)
+    bf = Battlefield([fighter, a, b, c], board=board)
+    targets = select_targets(fighter, abilities["sword"], make_ctx(bf))
+    assert len(targets) == 1                              # NOT all three
+    assert targets[0].instance_name == "wolf_a"           # nearest

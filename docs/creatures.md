@@ -96,17 +96,32 @@ option ineligible when the resource is exhausted), `uses_bonus_action`, `descrip
 
 | Field | Meaning |
 |---|---|
-| `targets` | A selector naming the candidate pool. **Omitted = living *visible* enemies.** |
+| `targets` | A selector naming the candidate pool. **Omitted = the default single-target enemy pool.** |
 | `target_filter` | An expression filtering that pool; `target` is each candidate. |
 | `max_targets` | How many to keep (default 1 for ordered pools). |
+| `requires_sight` | Whether the default pool is filtered to what the actor can see. Default `true`. |
+| `advantage_when` | An expression; if true at swing time (target in scope), the attack has advantage. |
 
-> ⚠️ **The sight default is the #1 authoring trap.** Leaving `targets` off means the ability
-> can only pick targets it can *see*, so in darkness it silently does nothing. That's right
-> for spells that require sight, and wrong for weapons. **Put `targets = "enemies"` on
-> mundane weapon attacks.**
+> ⚠️ **Two related traps, both about single- vs multi-target attacks:**
+>
+> - **Sight.** With `targets` omitted the default pool is *visible* enemies, so a weapon in
+>   darkness silently does nothing. Right for spells, wrong for weapons — set
+>   **`requires_sight = false`** on mundane weapons (keeps them single-target).
+> - **Don't use a set selector for a single-target attack.** `targets = "enemies"` looks
+>   like "attack an enemy", but `enemies` is a *set* selector: with no `max_targets` it hits
+>   **every** enemy. Harmless with one enemy on the board, a 6× damage bug against a pack.
+>   For "one enemy, no sight needed", use `requires_sight = false` and leave `targets` off.
 
-Set selectors (`enemies`, `allies`, `enemies_grappled_by_self`, `downed_allies`) skip the
-ordering rules — the set *is* the target list, capped by `max_targets`.
+Set selectors (`enemies`, `allies`, `enemies_grappled_by_self`, `downed_allies`) are for
+genuinely multi-target abilities (an AoE save, a party buff). They skip the ordering rules —
+the set *is* the target list, capped by `max_targets`.
+
+`advantage_when` is how conditional advantage like Pack Tactics is expressed (advantage if a
+pack-mate is adjacent to the target):
+
+```toml
+advantage_when = "count(allies_within_of(target, 5)) > 0"
+```
 
 ## Multiattack
 

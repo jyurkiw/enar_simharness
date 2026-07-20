@@ -60,7 +60,7 @@ Bare names (no parentheses).
 | `can_see(a, b)` / `in_reach(a, b)` | Line of sight / melee reach |
 | `is_grappling(a, b)` / `is_grappled_by(a, b)` / `is_grappled(who)` | Grapple state |
 | `enemies_within(ft)` / `allies_within(ft)` | Sets within range of `self` |
-| `enemies_within_of(who, ft)` | Enemies within `ft` of *another* creature |
+| `enemies_within_of(who, ft)` / `allies_within_of(who, ft)` | Sets within `ft` of *another* creature |
 | `enemies_tagged('tag')` / `allies_tagged('tag')` | Sets by tag |
 | `resource_available('name')` | Resource pool not empty |
 | `round()` | Current round number (1-based) |

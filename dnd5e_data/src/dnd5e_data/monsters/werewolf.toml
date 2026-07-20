@@ -1,0 +1,80 @@
+# Werewolf, CR 3. Straight from the 2024 SRD (SRD_CC_v5.2.1, "Werewolf").
+#
+# NOTE ON EDITION: the 2024 werewolf has NO damage immunity or resistance to
+# nonmagical / non-silvered weapons — that was a 2014 trait and is gone. It is
+# just a fast, hard-hitting melee brute. (This is why the sim needs no
+# damage-type mitigation system.)
+#
+# Modeled for the "6 werewolves rush the party and fight to the death" scenario:
+# they close to melee (`tactic = "engage"`) in hybrid form and make their melee
+# Multiattack. No retreat, no clever targeting — the encounter's premise is that
+# they're too new at lycanthropy for tactics.
+#
+#   * Pack Tactics — advantage on an attack when a pack-mate is adjacent to the
+#     target. With six of them swarming a 5-PC party this is almost always on,
+#     and it's their defining strength. Expressed with `advantage_when` on each
+#     attack (a Werewolf ally within 5 ft of the target; `allies_within_of`
+#     excludes the attacker itself, so it correctly requires a SECOND wolf).
+#   * Multiattack — the SRD is "two attacks (Scratch or Longbow), one may be
+#     replaced by Bite." Rushing into melee, the strongest line is Bite +
+#     Scratch, so that's the (only, melee) multiattack option here. The Longbow
+#     and pure-Scratch lines are omitted: these wolves never kite.
+#
+# DELIBERATE CUTS (documented):
+#   * The Bite's lycanthropy curse ("a cursed humanoid that drops to 0 HP
+#     becomes a Werewolf") is not modeled — it would require a downed PC to
+#     switch sides mid-trial, which the fixed-roster engine can't do. It doesn't
+#     change whether the party *wins* this fight (a PC at 0 HP is out either
+#     way); it makes the campaign aftermath worse. The CON save itself is
+#     omitted too, since without the side-switch it's a cosmetic column.
+#   * Shape-Shift (bonus action) is irrelevant here: stats are identical across
+#     forms except size, and these wolves stay in hybrid form to melee.
+name = "werewolf"
+display_name = "Werewolf"
+
+[classification]
+size = "Medium"
+type = "Monstrosity"
+cr = 3
+
+[stats]
+strength = 16
+dexterity = 14
+constitution = 14
+intelligence = 10
+wisdom = 11
+charisma = 10
+ac = 15
+speed = 30
+initiative_bonus = 4
+
+[stats.health]
+average = 71
+hit_dice = "11d8+22"
+
+[stats.senses]
+darkvision = 60
+passive_perception = 14
+
+[abilities.bite]
+kind = "attack"
+to_hit = 5
+damage = "2d8+3"
+damage_type = "piercing"
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
+advantage_when = "count(allies_within_of(target, 5)) > 0"   # Pack Tactics
+
+[abilities.scratch]
+kind = "attack"
+to_hit = 5
+damage = "2d6+3"
+damage_type = "slashing"
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
+advantage_when = "count(allies_within_of(target, 5)) > 0"   # Pack Tactics
+
+[multiattack.hybrid]                # Bite + Scratch (one attack replaced by Bite)
+actions = ["bite", "scratch"]
+priority = 0
+
+[behavior]
+tactic = "engage"                   # rush in and fight to the death

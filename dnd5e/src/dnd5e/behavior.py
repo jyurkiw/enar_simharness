@@ -116,6 +116,12 @@ class ConcreteScope:
         bf = self._ctx.battlefield
         return [e for e in self.enemies() if (bf.distance_ft(who, e) or 0) <= ft]
 
+    def allies_within_of(self, who, ft: float):
+        # Living allies (excludes self and the Down) within `ft` of `who` — the
+        # Werewolf's Pack Tactics asks "is another pack member next to my target".
+        bf = self._ctx.battlefield
+        return [a for a in self.allies() if (bf.distance_ft(who, a) or 0) <= ft]
+
     def nearest_enemy(self):
         return self._ctx.battlefield.nearest_enemy(self._self)
 
@@ -269,7 +275,7 @@ def _costs_available(option: MultiattackOption, actor: Creature) -> bool:
 
 def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> list:
     scope = ConcreteScope(ctx, actor)
-    pool = _resolve_targets_selector(ability.targets, scope, ctx)
+    pool = _resolve_targets_selector(ability.targets, scope, ctx, requires_sight=ability.requires_sight)
     is_set_selector = ability.targets in SET_SELECTORS
 
     if ability.target_filter is not None:
@@ -314,10 +320,15 @@ def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> l
 
 
 def _resolve_targets_selector(targets_name: Optional[str], scope: ConcreteScope,
-                              ctx: BehaviorContext) -> list:
+                              ctx: BehaviorContext, *, requires_sight: bool = True) -> list:
     if targets_name is None:
+        # The default single-target enemy pool. Sight-filtered unless the
+        # ability opted out (`requires_sight = false` — a mundane weapon).
         actor = scope.self_creature()
-        return [e for e in ctx.battlefield.enemies_of(actor) if ctx.battlefield.can_see(actor, e)]
+        enemies = ctx.battlefield.enemies_of(actor)
+        if requires_sight:
+            enemies = [e for e in enemies if ctx.battlefield.can_see(actor, e)]
+        return enemies
     node = expressions.Selector((targets_name,))
     result = expressions.evaluate(node, scope)
     if result is None:

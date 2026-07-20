@@ -1,0 +1,119 @@
+# Six werewolves rush a level-5 party in a farmhouse and fight to the death.
+#
+# The premise (from the scenario text): the werewolves are too new at
+# lycanthropy for tactics — they just charge into melee and swing until they
+# drop. So: hybrid-form melee Multiattack (Bite + Scratch), `engage` movement,
+# no retreat, no focus-fire. Their one real strength is Pack Tactics, which
+# with six bodies swarming five PCs is on almost every swing (see werewolf.toml).
+#
+# Board: `plain_room` — a close-quarters brawl where both sides reach melee in
+# round one, matching "rush the party in a farmhouse". (The big `arena` board
+# would instead hand the party several free rounds of ranged fire during a
+# 120 ft approach — a different, more favourable fight than the scenario
+# describes.)
+#
+# The encounter is well above the level-5 "deadly" line — 6 x CR3 = 4,200 XP,
+# roughly doubled by the monster-count multiplier — so expect it to be brutal;
+# that's the question the sim answers: HOW brutal, and how the two parties differ.
+#
+# `[sweep]` runs it against both level-5 parties:
+#   * "standard"  — the adventurers: fighter, ranger, rogue, cleric, wizard.
+#   * "alternate" — the vanguard:    barbarian, paladin, monk, cleric, wizard.
+name = "werewolf_pack"
+description = "6 werewolves vs a level-5 party (standard and alternate), fight to the death"
+
+board = "lib:plain_room"
+
+[simulation]
+trials = 5000
+max_rounds = 12
+seed = 20260720
+
+# Base roster = the standard party (so a bare `dnd5e-sim run` works standalone);
+# the sweep's first variant repeats it, the second swaps in the vanguard party.
+[[combatants]]
+creature = "champion_fighter"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "werewolf"
+side = "monsters"
+spawn = "monsters"
+count = 6
+
+[[sweep.axes]]
+target = "combatants"
+values = [
+  # standard party (the adventurers)
+  [
+    { creature = "champion_fighter", side = "party", spawn = "party" },
+    { creature = "hunter_ranger", side = "party", spawn = "party" },
+    { creature = "thief_rogue", side = "party", spawn = "party" },
+    { creature = "life_cleric", side = "party", spawn = "party" },
+    { creature = "evoker_wizard", side = "party", spawn = "party" },
+    { creature = "werewolf", side = "monsters", spawn = "monsters", count = 6 },
+  ],
+  # alternate party (the vanguard)
+  [
+    { creature = "berserker_barbarian", side = "party", spawn = "party" },
+    { creature = "devotion_paladin", side = "party", spawn = "party" },
+    { creature = "martial_arts_monk", side = "party", spawn = "party" },
+    { creature = "life_cleric", side = "party", spawn = "party" },
+    { creature = "evoker_wizard", side = "party", spawn = "party" },
+    { creature = "werewolf", side = "monsters", spawn = "monsters", count = 6 },
+  ],
+]
+
+[sweep]
+columns = ["side_dealt_party", "side_dealt_monsters", "wiped_party", "any_dead_party"]
+
+[output]
+report = ["totals", "survival"]
+
+# RESULTS (5000 trials; see the `survival` report section when you run it):
+#   Both parties are wiped ~98-100% of the time. This is a TPK-grade encounter
+#   as modeled — 6 x CR3 is well above the level-5 "deadly" line, and the fight
+#   starts at melee range with the wolves' Pack Tactics (advantage) live on
+#   nearly every swing.
+#     * STANDARD party:  ~100% wipe; deals ~128 of the wolves' 426 HP; kills ~0.4
+#       wolves. The tanky fighter + ranged ranger survive longest but the party
+#       still can't out-damage six werewolves.
+#     * ALTERNATE party: ~98% wipe; deals ~204; kills ~1.5 wolves. The all-melee
+#       bruisers (barbarian/paladin/monk) out-damage the standard party and
+#       occasionally (~2%) pull out a win, but usually still fall.
+#
+# TWO MODELING CAVEATS that make this the PESSIMISTIC end of the range — both
+# realistic for "caught flat-footed", both easy to relax if you want the other
+# end:
+#   1. No focus-fire. Party members target the NEAREST wolf (no `order = "focus"`
+#      rule), so damage spreads across all six and kills almost none — each wolf
+#      stays at full effectiveness. A coordinated party that drops wolves one at
+#      a time would shed incoming damage far faster. To test that, inject a
+#      focus rule via `[overrides.<pc>.behavior] targeting = [{ order = "focus" }]`
+#      and set `[environment] focus = "werewolf_1"` (see sims/masks for the
+#      pattern).
+#   2. Close-quarters start. `plain_room` puts both sides in melee by round 1.
+#      A larger room, a doorway choke, or a surprise round would all help the
+#      party. Swap `board = "lib:arena"` for an open-field version with a long
+#      approach the party can plink across.

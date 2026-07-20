@@ -25,6 +25,7 @@ from simharness.report import print_report, save_charts
 from simharness.runner import TrialRunner
 from simharness.stats import CompareReport, compare
 
+from . import report_ext  # noqa: F401 — registers the game-specific "survival" report section
 from .loader import build_simulation, load_creature, load_simulation, load_toml_file
 from .system import Dnd5eSystem
 

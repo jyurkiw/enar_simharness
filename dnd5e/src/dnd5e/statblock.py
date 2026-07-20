@@ -69,9 +69,20 @@ class Ability:
     dc: Optional[int] = None
     half_on_save: bool = False
 
+    # attack, conditional
+    advantage_when: Optional["Node"] = None   # e.g. Pack Tactics — advantage if this holds
+
     # targeting
     targets: Optional[str] = None
     target_filter: Optional["Node"] = None
+    # Whether the default (no explicit `targets`) enemy pool is filtered to
+    # what the actor can SEE. Spells that require sight keep the default True;
+    # mundane weapons set it False (you can swing at an unseen foe). This is the
+    # correct way to skip the sight requirement for a SINGLE-target attack — the
+    # old `targets = "enemies"` trick also switched to set-mode, so a single
+    # weapon swing hit *every* enemy (harmless with one enemy, a big bug with a
+    # pack).
+    requires_sight: bool = True
     max_targets: Optional[int] = None
 
     # heal

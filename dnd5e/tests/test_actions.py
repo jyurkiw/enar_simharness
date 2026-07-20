@@ -133,6 +133,28 @@ def test_attack_target_blinded_grants_attacker_advantage(tmp_path):
     assert out.hit is True  # 18 >= ac 14
 
 
+def test_advantage_when_grants_advantage_on_pack_tactics(tmp_path):
+    """Pack Tactics (werewolf): an `advantage_when` expression on the ability,
+    evaluated against the final target with the attacker as `self`, folds into
+    advantage — here, only when a second attacker is adjacent to the target."""
+    from dnd5e import expressions
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    wolf_a = make_creature("wolf_a", "monsters", 0, 0)
+    prey = make_creature("prey", "party", 1, 0)
+    ability = Ability(name="bite", kind="attack", to_hit=0, damage="1d8", damage_type="piercing",
+                      advantage_when=expressions.parse_and_validate(
+                          "count(allies_within_of(target, 5)) > 0", where="t"))
+
+    # Lone wolf: no ally adjacent to the prey -> straight roll (single d20=5 miss).
+    ctx, _, _ = make_ctx(board, [5], [wolf_a, prey])
+    assert ctx.attack(wolf_a, prey, bonus=0, damage="1d8", ability=ability).hit is False
+
+    # Pack: a second wolf adjacent to the prey -> advantage (rolls 5 and 18, keeps 18).
+    wolf_b = make_creature("wolf_b", "monsters", 2, 0)  # adjacent to prey at (1,0)
+    ctx, _, _ = make_ctx(board, [5, 18, 4], [wolf_a, prey, wolf_b])
+    assert ctx.attack(wolf_a, prey, bonus=0, damage="1d8", ability=ability).hit is True  # 18 >= ac 14
+
+
 def test_grant_self_advantage_condition_gives_attacker_advantage(tmp_path):
     """Reckless Attack (design doc 07, Bug A): a condition on the ATTACKER that
     grants `grant_self_advantage` folds into advantage on its own rolls."""

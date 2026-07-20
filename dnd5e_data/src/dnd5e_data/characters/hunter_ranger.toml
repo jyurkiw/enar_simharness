@@ -28,11 +28,12 @@
 #     the first eligible hit (so on round 1, if the ranger strikes a still-full
 #     otyugh first, it correctly waits for the next hit that turn).
 #
-# PHASE 4 FIX: both weapons get `targets = "enemies"` (skips the default
-# "visible enemies only" sight requirement) — mundane weapon attacks don't
-# need sight, RAW (see champion_fighter.toml's header note for the full
-# reasoning); grappling in particular is tactile, not visual, so the
-# grappler-targeting shortsword especially needs this.
+# SIGHT: both weapons set `requires_sight = false` — mundane weapon attacks
+# don't need to see the target, RAW (see champion_fighter.toml's header note);
+# grappling in particular is tactile, not visual, so the grappler-targeting
+# shortsword especially needs this. (This replaced the old `targets = "enemies"`
+# trick, which also multi-targeted — a bug that only surfaced against a pack;
+# see design doc 07.)
 name = "hunter_ranger"
 display_name = "Hunter Ranger"
 
@@ -86,7 +87,7 @@ damage = "1d8+4"
 damage_type = "piercing"
 range_normal = 150
 range_long = 600
-targets = "enemies"
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
 on_hit = [
   { effect = "damage_rider", damage = "1d6", damage_type = "piercing", name = "hunters_mark", when = "has_condition(self, 'hunters_mark')" },
   { effect = "damage_rider", damage = "1d8", damage_type = "piercing", name = "colossus_slayer", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
@@ -98,7 +99,7 @@ kind = "attack"
 to_hit = 7
 damage = "1d6+4"
 damage_type = "piercing"
-targets = "enemies"
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
 target_filter = "is_grappling(target, self)"
 on_hit = [
   { effect = "damage_rider", damage = "1d6", damage_type = "piercing", name = "hunters_mark", when = "has_condition(self, 'hunters_mark')" },

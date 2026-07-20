@@ -273,7 +273,7 @@ FUNCTION_NAMES = frozenset({
     "is_grappling", "is_grappled_by", "is_grappled",
     "resource_available", "round", "has_flag", "any_yet_to_act", "side_of",
     "enemies_within", "allies_within", "enemies_tagged", "allies_tagged",
-    "enemies_within_of", "turn_marked",
+    "enemies_within_of", "allies_within_of", "turn_marked",
 })
 
 
@@ -342,6 +342,7 @@ class Scope(Protocol):
     def enemies_tagged(self, tag: str) -> Sequence[Any]: ...
     def allies_tagged(self, tag: str) -> Sequence[Any]: ...
     def enemies_within_of(self, who: Any, ft: float) -> Sequence[Any]: ...
+    def allies_within_of(self, who: Any, ft: float) -> Sequence[Any]: ...
     def nearest_enemy(self) -> Optional[Any]: ...
     def ally_lowest_hp(self) -> Optional[Any]: ...
 
@@ -511,4 +512,5 @@ _CALL_TABLE: dict[str, Callable[..., Any]] = {
     "enemies_tagged": lambda scope, tag: scope.enemies_tagged(tag),
     "allies_tagged": lambda scope, tag: scope.allies_tagged(tag),
     "enemies_within_of": lambda scope, who, ft: scope.enemies_within_of(who, ft),
+    "allies_within_of": lambda scope, who, ft: scope.allies_within_of(who, ft),
 }

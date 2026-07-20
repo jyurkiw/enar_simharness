@@ -173,13 +173,18 @@ def _build_ability(name: str, spec: dict, *, where: str, known_conditions: froze
     target_filter = None
     if "target_filter" in spec:
         target_filter = expressions.parse_and_validate(spec["target_filter"], where=f"{where}.target_filter")
+    advantage_when = None
+    if "advantage_when" in spec:
+        advantage_when = expressions.parse_and_validate(spec["advantage_when"], where=f"{where}.advantage_when")
     return Ability(
         name=name, kind=kind,
         to_hit=spec.get("to_hit"), damage=spec.get("damage"), damage_type=spec.get("damage_type"),
         crit_range=spec.get("crit_range", 20), reach=spec.get("reach"),
         range_normal=spec.get("range_normal"), range_long=spec.get("range_long"),
+        advantage_when=advantage_when,
         ability=spec.get("ability"), dc=spec.get("dc"), half_on_save=spec.get("half_on_save", False),
         targets=spec.get("targets"), target_filter=target_filter, max_targets=spec.get("max_targets"),
+        requires_sight=spec.get("requires_sight", True),
         amount=spec.get("amount"), range=spec.get("range"),
         costs=spec.get("costs"), uses_bonus_action=spec.get("uses_bonus_action", False),
         description=spec.get("description"),

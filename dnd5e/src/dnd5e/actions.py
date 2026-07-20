@@ -166,6 +166,18 @@ class CombatContext:
         # (the Barbarian's Reckless Attack).
         if conditions.grants_for(attacker, "grant_self_advantage", condition_defs=self.condition_defs):
             advantage = True
+        # Per-attack conditional advantage (the Werewolf's Pack Tactics): an
+        # `advantage_when` expression evaluated against the *final* target (post-
+        # redirect), with the attacker as `self`. Kept on the ability rather than
+        # a condition because it depends on live board state at swing time, not
+        # on a flag the attacker carries.
+        if ability is not None and ability.advantage_when is not None:
+            from . import expressions
+            from .behavior import BehaviorContext, ConcreteScope
+            adv_ctx = BehaviorContext(battlefield=bf, round_index=self.round_index,
+                                      turn_order=self.turn_order, flags=self.flags, resolver=self.resolver)
+            if expressions.evaluate(ability.advantage_when, ConcreteScope(adv_ctx, attacker, target=target)):
+                advantage = True
         if conditions.grants_for(attacker, "impose_disadvantage", condition_defs=self.condition_defs):
             disadvantage = True
         # Target-conditional (can't be a blanket condition check): the
