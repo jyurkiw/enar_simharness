@@ -106,12 +106,16 @@ class GameState:
 class Dnd5eSystem:
     def __init__(self, *, board, roster: list, max_rounds: int, hp_mode: str = "average",
                  focus: Optional[dict] = None, obscurement: tuple = (),
-                 light_plan: Optional[object] = None) -> None:
+                 light_plan: Optional[object] = None, reinforcements: tuple = ()) -> None:
         self.board = board
         self.roster = roster
         self.max_rounds = max_rounds
         self.hp_mode = hp_mode
         self.focus = dict(focus or {})
+        # Reinforcement waves: tuple[(round_index, tuple[RosterSlot]), ...],
+        # spawned at the start of their round by turn_order (design: the cathedral
+        # guard waves arriving from the back). Pre-expanded by the loader.
+        self.reinforcements = tuple(reinforcements)
         # `obscurement`/`light_plan`: tuple[loader.ObscurementSpec, ...] /
         # Optional[loader.LightPlanSpec] — duck-typed here (not imported) so
         # this module doesn't import loader.py, which imports RosterSlot from
@@ -127,6 +131,9 @@ class Dnd5eSystem:
         self.condition_defs: dict = {}
         for slot in self.roster:
             self.condition_defs.update(slot.statblock.conditions)
+        for _round, slots in self.reinforcements:
+            for slot in slots:
+                self.condition_defs.update(slot.statblock.conditions)
 
     # ---- GameSystem protocol --------------------------------------------------
 
@@ -149,22 +156,7 @@ class Dnd5eSystem:
                                    condition_defs=self.condition_defs)
 
         for creature in creatures:
-            creature.roll_hp(resolver, mode=self.hp_mode)
-            # Seed per-trial resource pools (ki, spell slots, ...) from the
-            # statblock. setup_trial builds fresh Creatures each trial and does
-            # NOT call reset_state, so without this every `resource_available`
-            # / costed-ability check saw an empty pool (a latent bug: a monk's
-            # ki gate was silently always false). This is the matching seed for
-            # `_spend_costs`'s debit.
-            for name, resource in creature.statblock.resources.items():
-                creature.resources[name] = resource.uses
-
-        # Passive traits (design doc 03's `emit_light`/`limited_darkvision`/
-        # `darkvision_immunity` — all marked "(trait)") apply once here, at
-        # trial setup, not per-hit.
-        for creature in creatures:
-            for trait in creature.statblock.traits.values():
-                apply_effects(trait.effects, EffectScope(ctx=combat_ctx, source=creature, target=creature))
+            self._prime(creature, combat_ctx, resolver)
 
         # Initiative: 1d20 + bonus, ties keep roster order (Python's sort is
         # stable, and `rolled` is built in roster order, so a `reverse=True`
@@ -180,16 +172,47 @@ class Dnd5eSystem:
             flags=flags,
         )
 
+    def _prime(self, creature: Creature, combat_ctx, resolver) -> None:
+        """Roll HP, seed resource pools, and apply passive traits — everything a
+        freshly-built Creature needs before it acts. Shared by setup_trial and
+        reinforcement spawning. (Resources must be seeded here because Creatures
+        are built fresh per trial and reset_state is never called — a monk's ki
+        gate was silently always-false before this.)"""
+        creature.roll_hp(resolver, mode=self.hp_mode)
+        for name, resource in creature.statblock.resources.items():
+            creature.resources[name] = resource.uses
+        for trait in creature.statblock.traits.values():
+            apply_effects(trait.effects, EffectScope(ctx=combat_ctx, source=creature, target=creature))
+
+    def _spawn_reinforcements(self, ctx: TrialContext) -> None:
+        """Bring on any wave whose round is now (design doc: guard reinforcements
+        arriving from the back). New arrivals join the battlefield and the end of
+        the initiative order, acting from this round on."""
+        game: GameState = ctx.game
+        resolver = game.combat_ctx.resolver
+        for wave_round, slots in self.reinforcements:
+            if wave_round != ctx.round_index:
+                continue
+            for slot in slots:
+                c = Creature(statblock=slot.statblock, instance_name=slot.instance_name,
+                             side=slot.side, tags=slot.tags)
+                c.place(*slot.start)
+                game.battlefield.creatures[c.instance_name] = c
+                game.creatures[c.instance_name] = c
+                self._prime(c, game.combat_ctx, resolver)
+                game.turn_order.append(c.instance_name)  # act at the tail this round
+
     def turn_order(self, ctx: TrialContext) -> list:
         # Called exactly once per round, at its start (runner.py's
-        # `_begin_round`) — clear round-scoped flags, refresh combatant-bound
-        # obscurement auras onto their sources' current cells, and re-derive
-        # who's blinded by standing in heavy obscurement, all before anyone
-        # acts this round.
+        # `_begin_round`) — clear round-scoped flags, spawn any due reinforcement
+        # wave, refresh combatant-bound obscurement auras onto their sources'
+        # current cells, and re-derive who's blinded by standing in heavy
+        # obscurement, all before anyone acts this round.
         game: GameState = ctx.game
         game.flags.clear_round()
         for c in game.creatures.values():
             c.round_scratch.clear()
+        self._spawn_reinforcements(ctx)
         game.battlefield.refresh_auras(ctx.round_index)
         self._sync_obscurement(game)
         return game.turn_order

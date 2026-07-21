@@ -64,7 +64,7 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 - [x] **06** Wizard L6 spells (fireball/shatter/thunderwave) + 1/1/1 leveled budget (`cathedral-06-wizard-spells`)
 - [x] **07** Sculpt Spells (allies auto-succeed up to 1+level) (`cathedral-07-sculpt`)
 - [x] **08** Shield reaction spell (+5 AC, gated, 2 uses) (`cathedral-08-shield`)
-- [ ] **09** Reinforcement waves (mid-trial spawn, r6 + every 3) (`cathedral-09-reinforcements`)
+- [x] **09** Reinforcement waves (mid-trial spawn, r6 + every 3) (`cathedral-09-reinforcements`)
 - [ ] **10** Extraction objective: seal object, box carry, retreat/escape win (`cathedral-10-extraction`)
 - [ ] **11** Full sim wired + 10-round report + findings (`cathedral-11-run`)
 
@@ -94,3 +94,9 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
   closing distance — a non-issue for the extraction (the seal is at the north
   chancel *near* the horde, so PCs charge toward the objective, not away). Kept
   `deathmatch.toml` as a standing pure-combat reference.
+- **09:** Reinforcements spawn at round start via system.turn_order and are
+  **appended to the tail** of the initiative order (no per-wave initiative roll —
+  they act last on arrival; a fair simplification, flag if it matters). Ledger
+  now knows wave names/sides (cli). Verified: wave-6 arrives and acts, monster
+  damage 240->295. Wave-9 rarely fires in a deathmatch (trial ends first) — it'll
+  matter more in the shorter extraction runs only if the party lingers.

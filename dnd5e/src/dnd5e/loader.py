@@ -473,6 +473,7 @@ class SimulationSpec:
     output: dict = field(default_factory=dict)
     obscurement: tuple = ()               # tuple[ObscurementSpec, ...]
     light_plan: Optional[LightPlanSpec] = None
+    reinforcements: tuple = ()            # tuple[(round_index, tuple[RosterSlot]), ...]
 
 
 def _resolve_creature_path(name: str, *, sim_dir: Path, sources: list) -> Path:
@@ -593,9 +594,44 @@ def build_simulation(cfg: dict, *, sim_dir: Path, name_fallback: str,
         light_plan = LightPlanSpec(source=lp["source"], round=lp["round"],
                                    costs_action=lp.get("costs_action", True))
 
+    # Reinforcement waves (mid-trial arrivals). Each rule spawns `combatants`
+    # at `spawn` starting `first_round`, repeating every `interval` rounds up to
+    # max_rounds. Pre-expanded to concrete (round, [RosterSlot]) waves here so
+    # the system only has to place them.
+    reinforcements = []
+    for ri, rule in enumerate(cfg.get("reinforcements", [])):
+        where = f"{path} [[reinforcements]][{ri}]"
+        require_keys(rule, ["first_round", "spawn", "combatants"], where=where)
+        spawn_label = rule["spawn"]
+        cells = board.spawns.get(spawn_label)
+        if not cells:
+            raise ValueError(f"{where}: spawn label {spawn_label!r} not found on board")
+        interval = rule.get("interval", 0)
+        rounds = [rule["first_round"]]
+        if interval > 0:
+            r = rule["first_round"] + interval
+            while r <= sim["max_rounds"]:
+                rounds.append(r)
+                r += interval
+        cursor = 0
+        for wr in rounds:
+            slots = []
+            for wc in rule["combatants"]:
+                require_keys(wc, ["creature"], where=f"{where}.combatants")
+                cn, cnt, wside = wc["creature"], wc.get("count", 1), wc.get("side", "monsters")
+                cpath = _resolve_creature_path(cn, sim_dir=sim_dir, sources=sources)
+                for i in range(cnt):
+                    start = cells[cursor % len(cells)]
+                    cursor += 1
+                    slots.append(RosterSlot(statblock=load_creature(cpath),
+                                            instance_name=f"{cn}_r{wr}_{i + 1}",
+                                            side=wside, start=start, tags=()))
+            reinforcements.append((wr, tuple(slots)))
+
     return SimulationSpec(
         name=cfg.get("name", name_fallback), board=board, roster=roster,
         trials=sim["trials"], max_rounds=sim["max_rounds"], seed=sim["seed"],
         hp_mode=hp_mode, focus=focus, output=cfg.get("output", {}),
         obscurement=tuple(obscurement), light_plan=light_plan,
+        reinforcements=tuple(reinforcements),
     )

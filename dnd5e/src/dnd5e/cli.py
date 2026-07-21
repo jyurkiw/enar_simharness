@@ -33,9 +33,16 @@ from .system import Dnd5eSystem
 def _build_system_and_runner(spec, *, seed=None, trials=None):
     system = Dnd5eSystem(board=spec.board, roster=spec.roster, max_rounds=spec.max_rounds,
                          hp_mode=spec.hp_mode, focus=spec.focus,
-                         obscurement=spec.obscurement, light_plan=spec.light_plan)
+                         obscurement=spec.obscurement, light_plan=spec.light_plan,
+                         reinforcements=spec.reinforcements)
     names = [slot.instance_name for slot in spec.roster]
     side_of = {slot.instance_name: slot.side for slot in spec.roster}
+    # Reinforcement arrivals must be known to the ledger (side attribution) even
+    # though they aren't on the board until their wave's round.
+    for _wave_round, slots in spec.reinforcements:
+        for slot in slots:
+            names.append(slot.instance_name)
+            side_of[slot.instance_name] = slot.side
     runner = TrialRunner(system, seed=seed if seed is not None else spec.seed,
                          max_rounds=spec.max_rounds, names=names, side_of=side_of)
     return runner, (trials if trials is not None else spec.trials)
