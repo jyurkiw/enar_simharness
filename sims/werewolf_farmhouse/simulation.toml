@@ -1,21 +1,22 @@
-# The werewolf pack, but on the actual farmhouse-ruin map instead of an open
-# room. Same premise as sims/werewolf_pack (6 werewolves, fight to the death,
-# rush the party) — the only change is the BOARD, to measure how much the real
-# terrain matters.
+# The werewolf pack on the actual farmhouse-ruin map instead of an open room.
+# The pack is the TUNED composition: 3 werewolves + 4 wolves, not the raw 6
+# werewolves — six werewolves are a guaranteed TPK on open ground, so this trades
+# a few down to CR-1/4 wolves that punch above their cost (Pack Tactics + a
+# knockdown-to-Prone bite) to keep the fight hard-but-winnable and more varied.
+# The premise is unchanged: the pack rushes and fights to the death.
 #
-# On `plain_room` (open, 30 ft apart) six werewolves are a guaranteed TPK: all
-# six reach melee in round one and swarm. The farmhouse is different — the party
-# spawns in the east corner, the wolves start scattered 20-65 ft away across the
-# ruin interior, and there are walls, windows (three-quarters cover) and debris
-# (difficult terrain) between. If the terrain staggers the pack's arrival — so
-# the party faces two or three wolves at a time instead of all six at once —
-# the same six wolves become a very different fight.
+# The farmhouse terrain is the point of this variant. The party spawns in the
+# east corner; the pack starts scattered 20-65 ft away across the ruin interior,
+# with walls, windows (three-quarters cover) and debris (difficult terrain)
+# between. If the terrain staggers the pack's arrival — so the party faces two
+# or three at a time instead of the whole pack at once — the same pack becomes a
+# very different fight than it is on `plain_room`.
 #
 # `[sweep]` runs both level-5 parties (standard adventurers / alternate vanguard)
-# on the farmhouse. See the count x tactics analysis in the session notes for
-# the fuller picture; this file is the canonical 6-wolf, real-map scenario.
+# on the farmhouse. See sims/werewolf_pack for the open-room baseline and the
+# session notes for the fuller count x composition analysis.
 name = "werewolf_farmhouse"
-description = "6 werewolves on the farmhouse-ruin map vs a level-5 party (standard and alternate)"
+description = "3 werewolves + 4 wolves on the farmhouse-ruin map vs a level-5 party (standard and alternate)"
 
 board = "lib:farmhouse_ruin"
 
@@ -53,7 +54,13 @@ spawn = "party"
 creature = "werewolf"
 side = "monsters"
 spawn = "monsters"
-count = 6
+count = 3
+
+[[combatants]]
+creature = "wolf"
+side = "monsters"
+spawn = "monsters"
+count = 4
 
 [[sweep.axes]]
 target = "combatants"
@@ -64,7 +71,8 @@ values = [
     { creature = "thief_rogue", side = "party", spawn = "party" },
     { creature = "life_cleric", side = "party", spawn = "party" },
     { creature = "evoker_wizard", side = "party", spawn = "party" },
-    { creature = "werewolf", side = "monsters", spawn = "monsters", count = 6 },
+    { creature = "werewolf", side = "monsters", spawn = "monsters", count = 3 },
+    { creature = "wolf", side = "monsters", spawn = "monsters", count = 4 },
   ],
   [
     { creature = "berserker_barbarian", side = "party", spawn = "party" },
@@ -72,7 +80,8 @@ values = [
     { creature = "martial_arts_monk", side = "party", spawn = "party" },
     { creature = "life_cleric", side = "party", spawn = "party" },
     { creature = "evoker_wizard", side = "party", spawn = "party" },
-    { creature = "werewolf", side = "monsters", spawn = "monsters", count = 6 },
+    { creature = "werewolf", side = "monsters", spawn = "monsters", count = 3 },
+    { creature = "wolf", side = "monsters", spawn = "monsters", count = 4 },
   ],
 ]
 
