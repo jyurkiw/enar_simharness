@@ -1,0 +1,88 @@
+# AUTO-DERIVED level-6 copy (see sims/cathedral). Base file kept unchanged.
+# Thief Rogue, level 5. Ported from
+# dnd5e_combat/characters/thief_rogue/defaults.toml.
+#
+# BUG-A/BUG-B REBUILD (design doc 07): the Phase 3 simplification (two plain
+# daggers, no rider, no damage reduction) turned out to be the dominant cause
+# of the otyugh sims' "monster damage overshoot" (Bug A) — a half-strength
+# rogue both kills the monster slower (it lives to act more) and soaks ~3x the
+# damage it should. Restored here:
+#
+#   * Sneak Attack — a once-per-turn 3d6 rider (6d6 on a crit) on the first
+#     dagger that hits each turn, gated by the `turn_marked`/`mark_turn`
+#     mechanism (design doc 07): the first hit fires the rider and marks the
+#     turn; the second hit sees the mark and skips it.
+#   * Cunning Strike (Poison) — the 2024 rider that trades 1d6 of Sneak Attack
+#     for a CON save vs. poison. Modeled as: the rider is 2d6 (1d6 spent on the
+#     effect) plus a DC-15 CON save that poisons the otyugh on a failure. In
+#     this engine (and the old one) `poisoned` is a cosmetic marker with no
+#     roll effect, so this only restores the `poisoned_<monster>` column; it
+#     does not change the otyugh's output. This is an APPROXIMATION of the old
+#     engine's exact alternating poison/trip logic (which is unrecoverable —
+#     that engine is deleted); tuned so `dealt_thief_rogue` lands near the
+#     captured baseline rather than reproducing its lost internals.
+#   * Uncanny Dodge — a `taking_damage` reaction (design doc 07's new
+#     `reduce_damage` primitive) that halves the first hit the rogue takes each
+#     round; `uses_reaction` naturally enforces once-per-round.
+name = "thief_rogue_l6"
+display_name = "Thief Rogue (Lv6)"
+
+[classification]
+level = 6
+tags = ["skirmisher"]
+
+[stats]
+strength = 10
+dexterity = 18
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 15
+speed = 30
+initiative_bonus = 4
+
+[stats.health]
+average = 45
+
+[stats.saves]
+constitution = 2
+
+[abilities.dagger]
+kind = "attack"
+to_hit = 7
+damage = "1d4+4"
+damage_type = "piercing"
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
+on_hit = [
+  { effect = "damage_rider", damage = "2d6", damage_type = "piercing", name = "sneak_attack", when = "not turn_marked('sneak')" },
+  { effect = "require_save", ability = "constitution", dc = 15, on_fail = [ { effect = "attach_condition", condition = "poisoned" } ], when = "not turn_marked('sneak')" },
+  { effect = "mark_turn", key = "sneak", when = "not turn_marked('sneak')" },
+]
+
+[multiattack.standard]
+actions = ["dagger", "dagger"]
+priority = 0
+
+# Uncanny Dodge: halve the first hit the rogue takes each round. `uses_reaction`
+# means it can only fire once per round (round_scratch["reaction_used"] is
+# cleared each round in system.turn_order), so it naturally lands on the first
+# incoming hit — matching the old engine's "halves the first hit it takes each
+# round." Faithful to the old engine, this is unconditional (no line-of-sight
+# gate on the attacker).
+[reactions.uncanny_dodge]
+trigger = "taking_damage"
+uses_reaction = true
+effects = [ { effect = "reduce_damage", factor = 0.5 } ]
+
+# Opportunity Attack (design doc 07): when an enemy walks out of this
+# creature's reach, take a swing with its melee weapon. `uses_reaction` gives
+# the RAW one-per-round limit for free. This is what the shadow sims'
+# `killed_on_retreat` column measures - parting shots on a fleeing monster.
+[reactions.opportunity_attack]
+trigger = "enemy_left_reach"
+uses_reaction = true
+effects = [ { effect = "make_attack", ability = "dagger" } ]
+
+[behavior]
+tactic = "engage"

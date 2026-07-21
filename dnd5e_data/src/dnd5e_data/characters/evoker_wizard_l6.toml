@@ -1,0 +1,86 @@
+# AUTO-DERIVED level-6 copy (see sims/cathedral). Base file kept unchanged.
+# Evoker Wizard, level 5. Ported from
+# dnd5e_combat/characters/evoker_wizard/defaults.toml.
+#
+# PHASE 4: round-1 Lightning Bolt opener (LOS-gated, matching
+# dnd5e_combat/characters/evoker_wizard/__init__.py's take_turn) now expressed
+# via `round() == 1 and can_see(self, nearest_enemy)`; Fire Bolt is the
+# always-eligible fallback for every other round.
+#
+# REMAINING DELIBERATE CUT: the old policy's grapple response (Thunderwave the
+# grappler to try to break free — full negate on a successful Dex save,
+# otherwise self-ungrapple + damage) needs an effect that acts on the *source*
+# of an ability rather than its target, which the current `on_fail`/`on_hit`
+# effect model doesn't support. Low-frequency in these sims (the Otyugh grapples
+# whichever melee combatant is nearest, rarely the kiting wizard) — left for
+# whenever that effect-scope gap is closed.
+name = "evoker_wizard_l6"
+display_name = "Evoker Wizard (Lv6)"
+
+[classification]
+level = 6
+
+[stats]
+strength = 10
+dexterity = 10
+constitution = 14
+intelligence = 19
+wisdom = 10
+charisma = 10
+ac = 11
+speed = 30
+initiative_bonus = 1
+
+[stats.health]
+average = 38
+
+[stats.saves]
+constitution = 2
+
+# A 5th-level wizard's two 3rd-level spell slots = two castings of Lightning
+# Bolt. `costs` (below) spends one per cast, and the `blast` multiattack option
+# becomes ineligible once they're gone — the usage ceiling.
+[resources.leveled_slots]
+uses = 2
+
+[abilities.fire_bolt]
+kind = "attack"
+to_hit = 7
+damage = "2d10"
+damage_type = "fire"
+range_normal = 120
+
+[abilities.lightning_bolt]
+kind = "save"
+ability = "dexterity"
+dc = 14
+damage = "8d6"
+damage_type = "lightning"
+half_on_save = true
+# A 100-ft, 5-ft-wide LINE from the caster (not single-target). The engine aims
+# it to catch the most enemies; every creature in the line rolls the DC 14 Dex
+# save (8d6, half on a save). Against a clustered pack this can hit several — the
+# whole point of bringing an evoker to a swarm fight.
+area = { shape = "line", length_ft = 100 }
+costs = { resource = "leveled_slots", amount = 1 }
+
+# The Lightning Bolt decision is a stochastic, friendly-fire-aware AI block, so
+# it lives in the Python escape hatch (EvokerBrain) below — the hatch forces
+# "blast" or "standard" each turn. The `when` here is a defensive floor only (a
+# clean 2+ line): it matters solely if the hatch ever falls through.
+[multiattack.blast]
+actions = ["lightning_bolt"]
+when = "aoe_targets('lightning_bolt') >= 2"
+priority = 10
+
+[multiattack.standard]
+actions = ["fire_bolt"]
+priority = 0
+
+[behavior]
+tactic = "kite"
+
+# The bolt-slot AI: per-round chance to spend a slot, aim to hit 2+ enemies with
+# no PC in the line, hold or nuke-solo otherwise (see the module for the knobs).
+[behavior.custom]
+handler = "python:dnd5e_behaviors.evoker_wizard.EvokerBrain"

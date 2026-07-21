@@ -1,0 +1,67 @@
+# AUTO-DERIVED level-6 copy (see sims/cathedral). Base file kept unchanged.
+# Unarmed Monk ("martial arts only"), level 5. Ported from
+# dnd5e_combat/characters/martial_arts_monk/defaults.toml.
+#
+# BUG-A REBUILD (design doc 07): the offense (3 unarmed strikes) was already
+# on-baseline; what the vanguard sim's monster-damage overshoot needed was this
+# monk's round-1 Stunning Strike burst — the old engine attempted Stunning
+# Strike on round 1 (or when an ally is Down), and a stunned otyugh skips a
+# turn, which is the main reason the vanguard baseline's monster damage is so
+# low. Added as a CON save (DC 14) on the first hit of round 1; on a failure
+# the otyugh is Stunned until the start of this monk's next turn. The "or when
+# an ally is Down" trigger is left out (rare in these otyugh sims) as is the
+# grapple-disadvantage handling — both within tolerance once the round-1 stun
+# is in. `resources.ki` stays as data (no ki spend needed: one round-1 attempt).
+name = "martial_arts_monk_l6"
+display_name = "Martial Arts Monk (Lv6)"
+
+[classification]
+level = 6
+tags = ["skirmisher"]
+
+[stats]
+strength = 10
+dexterity = 18
+constitution = 12
+intelligence = 10
+wisdom = 16
+charisma = 10
+ac = 17
+speed = 30
+initiative_bonus = 4
+
+[stats.health]
+average = 44
+
+[stats.saves]
+constitution = 1
+
+[resources.ki]
+uses = 5
+per = "encounter"
+
+[abilities.unarmed]
+kind = "attack"
+to_hit = 7
+damage = "1d8+4"
+damage_type = "bludgeoning"
+on_hit = [
+  { effect = "require_save", ability = "constitution", dc = 14, on_fail = [ { effect = "attach_condition", condition = "stunned", expires = "start_of_source_next_turn" } ], when = "round() == 1 and not turn_marked('stun')" },
+  { effect = "mark_turn", key = "stun", when = "round() == 1 and not turn_marked('stun')" },
+]
+
+[multiattack.standard]
+actions = ["unarmed", "unarmed", "unarmed"]
+priority = 0
+
+# Opportunity Attack (design doc 07): when an enemy walks out of this
+# creature's reach, take a swing with its melee weapon. `uses_reaction` gives
+# the RAW one-per-round limit for free. This is what the shadow sims'
+# `killed_on_retreat` column measures - parting shots on a fleeing monster.
+[reactions.opportunity_attack]
+trigger = "enemy_left_reach"
+uses_reaction = true
+effects = [ { effect = "make_attack", ability = "unarmed" } ]
+
+[behavior]
+tactic = "engage"

@@ -1,0 +1,64 @@
+# AUTO-DERIVED level-6 copy (see sims/cathedral). Base file kept unchanged.
+# Champion Fighter, level 5. Ported from
+# dnd5e_combat/characters/champion_fighter/defaults.toml. PHASE 3
+# SIMPLIFICATION: Savage Attacker (reroll one weapon damage die per turn) is
+# Python-policy-only in the old engine and isn't representable by the v1
+# effect-primitive registry yet — TODO(phase4): add `damage_reroll_keep_best`
+# to effects.py and a matching trait once it's needed.
+#
+# SIGHT (found via otyugh_shadow_solo's blanket-darkness smoke test): a mundane
+# weapon attack sets `requires_sight = false` so it isn't restricted to the
+# "living *visible* enemies" default — RAW, Blinded imposes disadvantage on
+# attacks, not an inability to attack; only spells with a "target you can see"
+# component need actual sight. Without this a blinded fighter can never select
+# a target once obscured. (This replaced the old `targets = "enemies"` trick,
+# which ALSO multi-targeted — a latent bug that only surfaced against a pack of
+# enemies; see design doc 07.)
+name = "champion_fighter_l6"
+display_name = "Champion Fighter (Lv6)"
+
+[classification]
+level = 6
+tags = ["tank"]
+
+[stats]
+strength = 19
+dexterity = 10
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 21
+speed = 30
+initiative_bonus = 1
+crit_range = 19
+
+[stats.health]
+average = 52
+
+[stats.saves]
+constitution = 2
+
+[abilities.longsword]
+kind = "attack"
+to_hit = 7
+damage = "1d8+4"
+damage_type = "slashing"
+crit_range = 19
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
+
+[multiattack.standard]
+actions = ["longsword", "longsword"]
+priority = 0
+
+# Opportunity Attack (design doc 07): when an enemy walks out of this
+# creature's reach, take a swing with its melee weapon. `uses_reaction` gives
+# the RAW one-per-round limit for free. This is what the shadow sims'
+# `killed_on_retreat` column measures - parting shots on a fleeing monster.
+[reactions.opportunity_attack]
+trigger = "enemy_left_reach"
+uses_reaction = true
+effects = [ { effect = "make_attack", ability = "longsword" } ]
+
+[behavior]
+tactic = "engage"

@@ -1,0 +1,131 @@
+# AUTO-DERIVED level-6 copy (see sims/cathedral). Base file kept unchanged.
+# Hunter Ranger, level 5. Ported from
+# dnd5e_combat/characters/hunter_ranger/defaults.toml.
+#
+# PHASE 4: grapple-conditional weapon swap — longbow at range, shortsword (at
+# its own grappler specifically, via `target_filter`) when grappled — now
+# expressed via `is_grappled(self)`/`is_grappling(target, self)`, matching
+# dnd5e_combat/characters/hunter_ranger/__init__.py's take_turn.
+#
+# BUG-A/BUG-B REBUILD (design doc 07): Hunter's Mark and Colossus Slayer, the
+# ranger's two damage riders, were a deliberate Phase 4 cut and turned out to
+# be the SECOND-largest cause (after the Thief Rogue) of the otyugh sims'
+# monster-damage overshoot — without them the ranger, the party's top baseline
+# DPS (~42 dmg/trial), dealt only ~26, so the party killed the otyugh slower
+# and it lived to act more. Restored now that `damage_rider`/`turn_marked`
+# exist:
+#   * Hunter's Mark — +1d6 on every weapon hit against the ranger's target,
+#     but only while the ranger holds Concentration: the `hunters_mark`
+#     self-condition (applied at trial setup by the `cast_hunters_mark` trait —
+#     the ranger opens with it) gates the rider, and the `concentration`
+#     reaction drops it on a failed CON save (fixed DC 10 — the RAW
+#     `max(10, damage/2)` is DC 10 for every hit the otyugh lands; documented
+#     simplification) after taking damage. Not re-cast once dropped: matches
+#     the old engine leaving the mark down for the rest of a fight it lost
+#     Concentration in. Without this the always-on approximation overshot the
+#     ranger's damage by ~33% in the longer multi-otyugh fights (design doc 07).
+#   * Colossus Slayer — +1d8 once per turn against a target below its HP max
+#     (`hp_pct(target) < 1.0`), gated once-per-turn by `turn_marked`; fires on
+#     the first eligible hit (so on round 1, if the ranger strikes a still-full
+#     otyugh first, it correctly waits for the next hit that turn).
+#
+# SIGHT: both weapons set `requires_sight = false` — mundane weapon attacks
+# don't need to see the target, RAW (see champion_fighter.toml's header note);
+# grappling in particular is tactile, not visual, so the grappler-targeting
+# shortsword especially needs this. (This replaced the old `targets = "enemies"`
+# trick, which also multi-targeted — a bug that only surfaced against a pack;
+# see design doc 07.)
+name = "hunter_ranger_l6"
+display_name = "Hunter Ranger (Lv6)"
+
+[classification]
+level = 6
+
+[stats]
+strength = 10
+dexterity = 18
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 10
+ac = 16
+speed = 30
+initiative_bonus = 7
+
+[stats.health]
+average = 52
+
+[stats.saves]
+constitution = 2
+
+# Hunter's Mark's concentration flag (a bare marker — no grants; its only job
+# is to be present-or-absent so the +1d6 rider can gate on it). Applied at
+# setup by the trait below, removed by the concentration reaction on a failed
+# save.
+[conditions.hunters_mark]
+
+# The ranger opens concentrating on Hunter's Mark (a bonus action on turn 1;
+# modeled as present from setup).
+[traits.cast_hunters_mark]
+effects = [ { effect = "attach_condition", condition = "hunters_mark" } ]
+
+# Concentration: a CON save (fixed DC 10) whenever the ranger takes damage;
+# on a failure it drops Hunter's Mark for the rest of the fight. `uses_
+# reaction = false` (a Concentration check is automatic, not the creature's
+# reaction), and the `when` guard means it only rolls — and only consumes a
+# die from the trial's RNG stream — while actually concentrating.
+[reactions.concentration]
+trigger = "taking_damage"
+when = "has_condition(self, 'hunters_mark')"
+effects = [
+  { effect = "require_save", ability = "constitution", dc = 10, on_fail = [ { effect = "remove_condition", condition = "hunters_mark" } ] },
+]
+
+[abilities.longbow]
+kind = "attack"
+to_hit = 9
+damage = "1d8+4"
+damage_type = "piercing"
+range_normal = 150
+range_long = 600
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
+on_hit = [
+  { effect = "damage_rider", damage = "1d6", damage_type = "piercing", name = "hunters_mark", when = "has_condition(self, 'hunters_mark')" },
+  { effect = "damage_rider", damage = "1d8", damage_type = "piercing", name = "colossus_slayer", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+  { effect = "mark_turn", key = "colossus", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+]
+
+[abilities.shortsword]
+kind = "attack"
+to_hit = 7
+damage = "1d6+4"
+damage_type = "piercing"
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
+target_filter = "is_grappling(target, self)"
+on_hit = [
+  { effect = "damage_rider", damage = "1d6", damage_type = "piercing", name = "hunters_mark", when = "has_condition(self, 'hunters_mark')" },
+  { effect = "damage_rider", damage = "1d8", damage_type = "piercing", name = "colossus_slayer", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+  { effect = "mark_turn", key = "colossus", when = "not turn_marked('colossus') and hp_pct(target) < 1.0" },
+]
+
+[multiattack.ranged]
+actions = ["longbow", "longbow"]
+when = "not is_grappled(self)"
+priority = 10
+
+[multiattack.melee]                    # forced to fight the grappler, per SRD
+actions = ["shortsword", "shortsword"]
+when = "is_grappled(self)"
+priority = 20
+
+# Opportunity Attack (design doc 07): when an enemy walks out of this
+# creature's reach, take a swing with its melee weapon. `uses_reaction` gives
+# the RAW one-per-round limit for free. This is what the shadow sims'
+# `killed_on_retreat` column measures - parting shots on a fleeing monster.
+[reactions.opportunity_attack]
+trigger = "enemy_left_reach"
+uses_reaction = true
+effects = [ { effect = "make_attack", ability = "shortsword" } ]
+
+[behavior]
+tactic = "kite"

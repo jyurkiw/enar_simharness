@@ -57,7 +57,7 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 
 - [x] **00** Plan doc + branch (`cathedral-00-plan`)
 - [x] **01** Enemy statblocks: cathedral_guard, priest_acolyte, cult_fanatic, cult_agitator, cultist, priest (`cathedral-01-enemies`)
-- [ ] **02** Level-6 PC copies of all 8 archetypes (`cathedral-02-pcs-l6`)
+- [x] **02** Level-6 PC copies of all 8 archetypes (`cathedral-02-pcs-l6`)
 - [ ] **03** Cathedral board (25×40, aisle + pews + doors) (`cathedral-03-board`)
 - [ ] **04** Minimal deathmatch sim runs to 10 rounds — MILESTONE (`cathedral-04-deathmatch`)
 - [ ] **05** Sphere + cube AoE geometry in `aoe.py` + loader shapes (`cathedral-05-aoe-shapes`)
@@ -80,4 +80,11 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 
 ## Running log (issues to revisit)
 
-_(appended as steps land)_
+- **02:** L6 copies are HP+level bumps only (ASI is levels 4/8, not 6). Deferred
+  L6 class features that need engine work, to revisit: **Paladin Aura of
+  Protection** (allies within 10 ft +CHA to saves — needs a save-bonus aura, no
+  such grant exists yet); Cleric extra slots / Channel Divinity (no combat delta
+  in these sims); Monk Ki-Empowered/martial-die unchanged at L6. Header line-2
+  comment still reads "level 5" (cosmetic; line-1 AUTO-DERIVED note clarifies).
+  Wizard L6 spells (fireball/shatter/thunderwave/shield) + Sculpt land in steps
+  06–08 on `evoker_wizard_l6.toml`.

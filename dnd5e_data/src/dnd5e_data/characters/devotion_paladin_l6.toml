@@ -1,0 +1,69 @@
+# AUTO-DERIVED level-6 copy (see sims/cathedral). Base file kept unchanged.
+# Oath of Devotion Paladin, level 5. Ported from
+# dnd5e_combat/characters/devotion_paladin/defaults.toml.
+#
+# BUG-A REBUILD (design doc 07): the old engine's paladin only spent Divine
+# Smite ON A CRIT (the header called it "Divine Smite-on-crit"), so its whole
+# rider contribution vs. baseline was ~half a smite — restored as an `on_crit`
+# `damage_rider` of 2d8 radiant, which `damage_rider` auto-doubles to 4d8 on
+# the crit (crit=event.crit). Crits are rare enough in a 3-round fight (~0.2/
+# trial) that the smite pool never runs dry, so this needs no resource
+# spending — `resources.smite_1`/`smite_2` stay as unused data (a future
+# every-hit-smite build would need a `spend_resource` effect, not built).
+# STILL CUT (small, documented, within tolerance): Great Weapon Fighting
+# (reroll 1s/2s) and GWM's crit-chained bonus attack.
+name = "devotion_paladin_l6"
+display_name = "Devotion Paladin (Lv6)"
+
+[classification]
+level = 6
+
+[stats]
+strength = 19
+dexterity = 10
+constitution = 14
+intelligence = 10
+wisdom = 10
+charisma = 16
+ac = 18
+speed = 30
+initiative_bonus = 0
+
+[stats.health]
+average = 52
+
+[stats.saves]
+constitution = 2
+
+[resources.smite_1]
+uses = 4
+per = "encounter"
+
+[resources.smite_2]
+uses = 2
+per = "encounter"
+
+[abilities.greatsword]
+kind = "attack"
+to_hit = 7
+damage = "2d6+4"
+damage_type = "slashing"
+# Divine Smite, spent only on a crit (old-engine behavior). 2d8 radiant,
+# doubled to 4d8 by the crit that triggered on_crit.
+on_crit = [ { effect = "damage_rider", damage = "2d8", damage_type = "radiant", name = "divine_smite" } ]
+
+[multiattack.standard]
+actions = ["greatsword", "greatsword"]
+priority = 0
+
+# Opportunity Attack (design doc 07): when an enemy walks out of this
+# creature's reach, take a swing with its melee weapon. `uses_reaction` gives
+# the RAW one-per-round limit for free. This is what the shadow sims'
+# `killed_on_retreat` column measures - parting shots on a fleeing monster.
+[reactions.opportunity_attack]
+trigger = "enemy_left_reach"
+uses_reaction = true
+effects = [ { effect = "make_attack", ability = "greatsword" } ]
+
+[behavior]
+tactic = "engage"
