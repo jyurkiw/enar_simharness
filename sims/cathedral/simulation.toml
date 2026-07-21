@@ -1,0 +1,124 @@
+# Cathedral extraction — the full encounter. A level-6 party must break the
+# sealed confessio (AC 14, 20 HP), grab the box, and get out, against the whole
+# central-chamber horde, with Cathedral Guard reinforcements arriving from the
+# back at rounds 6 and 9. Run to 10 rounds.
+#
+# Extraction success is modeled as "the seal is broken AND no PC is down" — per
+# the encounter's own rule that the party gets away with the box as long as
+# nobody goes down (see sims/cathedral/PLAN.md and dnd5e_behaviors/cathedral.py).
+# `[sweep]` runs both level-6 parties (standard adventurers / alternate vanguard).
+# A bruiser is steered onto the seal by the SealBreaker override.
+name = "cathedral"
+description = "Level-6 party breaks the sealed confessio vs the Cathedral horde + reinforcements (10 rounds)"
+
+board = "lib:cathedral"
+
+[simulation]
+trials = 500
+max_rounds = 10
+seed = 20260721
+
+# Default combatants = standard party + horde + seal (the sweep below swaps the
+# party; the horde, seal, and reinforcements are shared).
+[[combatants]]
+creature = "champion_fighter_l6"
+side = "party"
+spawn = "party"
+[[combatants]]
+creature = "hunter_ranger_l6"
+side = "party"
+spawn = "party"
+[[combatants]]
+creature = "thief_rogue_l6"
+side = "party"
+spawn = "party"
+[[combatants]]
+creature = "life_cleric_l6"
+side = "party"
+spawn = "party"
+[[combatants]]
+creature = "evoker_wizard_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "confessio_seal"
+side = "monsters"
+spawn = "seal"
+[[combatants]]
+creature = "cathedral_guard"
+side = "monsters"
+spawn = "monsters"
+count = 2
+[[combatants]]
+creature = "cult_fanatic"
+side = "monsters"
+spawn = "monsters"
+count = 2
+[[combatants]]
+creature = "priest_acolyte"
+side = "monsters"
+spawn = "monsters"
+count = 2
+[[combatants]]
+creature = "cult_agitator"
+side = "monsters"
+spawn = "monsters"
+count = 6
+[[combatants]]
+creature = "cultist"
+side = "monsters"
+spawn = "monsters"
+count = 8
+
+# Reinforcements: 4 Cathedral Guard + 1 Priest from the back at rounds 6 and 9.
+[[reinforcements]]
+first_round = 6
+interval = 3
+spawn = "monsters"
+combatants = [
+  { creature = "cathedral_guard", count = 4 },
+  { creature = "priest", count = 1 },
+]
+
+# The bruiser charges the seal and breaks it (applies only when that PC is in
+# the party, so it selects the fighter in the standard party and the barbarian
+# in the alternate).
+[overrides.champion_fighter_l6.behavior.custom]
+handler = "python:dnd5e_behaviors.cathedral.SealBreaker"
+[overrides.berserker_barbarian_l6.behavior.custom]
+handler = "python:dnd5e_behaviors.cathedral.SealBreaker"
+
+[[sweep.axes]]
+target = "combatants"
+values = [
+  [
+    { creature = "champion_fighter_l6", side = "party", spawn = "party" },
+    { creature = "hunter_ranger_l6", side = "party", spawn = "party" },
+    { creature = "thief_rogue_l6", side = "party", spawn = "party" },
+    { creature = "life_cleric_l6", side = "party", spawn = "party" },
+    { creature = "evoker_wizard_l6", side = "party", spawn = "party" },
+    { creature = "confessio_seal", side = "monsters", spawn = "seal" },
+    { creature = "cathedral_guard", side = "monsters", spawn = "monsters", count = 2 },
+    { creature = "cult_fanatic", side = "monsters", spawn = "monsters", count = 2 },
+    { creature = "priest_acolyte", side = "monsters", spawn = "monsters", count = 2 },
+    { creature = "cult_agitator", side = "monsters", spawn = "monsters", count = 6 },
+    { creature = "cultist", side = "monsters", spawn = "monsters", count = 8 },
+  ],
+  [
+    { creature = "berserker_barbarian_l6", side = "party", spawn = "party" },
+    { creature = "devotion_paladin_l6", side = "party", spawn = "party" },
+    { creature = "martial_arts_monk_l6", side = "party", spawn = "party" },
+    { creature = "life_cleric_l6", side = "party", spawn = "party" },
+    { creature = "evoker_wizard_l6", side = "party", spawn = "party" },
+    { creature = "confessio_seal", side = "monsters", spawn = "seal" },
+    { creature = "cathedral_guard", side = "monsters", spawn = "monsters", count = 2 },
+    { creature = "cult_fanatic", side = "monsters", spawn = "monsters", count = 2 },
+    { creature = "priest_acolyte", side = "monsters", spawn = "monsters", count = 2 },
+    { creature = "cult_agitator", side = "monsters", spawn = "monsters", count = 6 },
+    { creature = "cultist", side = "monsters", spawn = "monsters", count = 8 },
+  ],
+]
+
+[output]
+report = ["totals", "survival"]

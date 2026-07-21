@@ -66,7 +66,7 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 - [x] **08** Shield reaction spell (+5 AC, gated, 2 uses) (`cathedral-08-shield`)
 - [x] **09** Reinforcement waves (mid-trial spawn, r6 + every 3) (`cathedral-09-reinforcements`)
 - [x] **10** Extraction objective: seal object, box carry, retreat/escape win (`cathedral-10-extraction`)
-- [ ] **11** Full sim wired + 10-round report + findings (`cathedral-11-run`)
+- [x] **11** Full sim wired + 10-round report + findings (`cathedral-11-run`)
 
 ## Open questions / assumptions (resolve in the morning)
 
@@ -77,6 +77,44 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 - Reinforcement/extraction/scenario mechanics may need engine additions that
   don't exist yet; each is noted at its step. Where a clean generic mechanism is
   too big for the block, a scenario-scoped escape hatch is used and flagged.
+
+## FINDINGS — 10-round run (500 trials/party, step 11)
+
+The full sim runs end-to-end to 10 rounds (CLI `dnd5e-sim run
+sims/cathedral/simulation.toml`, both parties via sweep). Result, as currently
+modeled:
+
+| metric | STANDARD | ALTERNATE |
+|---|---|---|
+| seal broken (broke in) | 6.6% | 11.2% |
+| no PC down all fight | 0.0% | 0.0% |
+| **extraction success** (seal broken + nobody down) | **0.0%** | **0.0%** |
+| full party wipe | 100% | 99.8% |
+| party damage dealt (mean) | 341 | 313 |
+
+**This is a near-certain TPK as modeled.** Reinforcement guards (r6) take ~0%
+damage — the party is already spent before they arrive, so the base 20-strong
+horde is doing the wiping; the waves barely matter. Two things are tangled here
+and want a morning look:
+
+1. **The encounter is genuinely enormous.** 5 level-6 PCs vs 20 defenders
+   (2 Knight, 2 Fanatic, 6 Spy, 8 Cultist, 2 Acolyte) across a 40-long room,
+   with the objective at the *far* end by the horde. Even with the fully-spelled
+   Sculpt evoker, that's a lot of bodies and a long, exposed approach.
+2. **The extraction tactic isn't really modeled yet.** The party currently
+   fights an *attrition* battle in the open (breaker charges the seal, everyone
+   else trades blows) — there is no modeled smash-and-grab-and-**retreat**. The
+   intended line (break in fast, grab, everyone runs, 1 round of cover attacks,
+   gone) would cut exposure dramatically and is the thing most likely to move
+   these numbers. That needs: a real retreat mode (party disengages south once
+   `seal_broken`), the `party_retreating` flag (already referenced by Shield),
+   and a proper carry/escape end-state. This is the biggest remaining build.
+
+So: the machinery all works and the answer to "test to 10 rounds" is delivered,
+but the 0% should be read as "this is a death-trap for a stand-and-fight party" —
+whether it's a *fair* smash-and-grab needs the retreat model before we trust the
+number. Likely also worth revisiting: fewer defenders or a nearer seal, and the
+deferred Paladin Aura (would help the alternate party's saves vs the casters).
 
 ## Running log (issues to revisit)
 
