@@ -33,13 +33,17 @@ average = 38
 [stats.saves]
 constitution = 2
 
-# One slot of each level = the three-leveled-spell-per-fight budget.
+# Spell-slot budget. A level-6 evoker has three 3rd-level slots — in a fight
+# this desperate the wizard is expected to spend all THREE on Fireball (the
+# `cast_fireball` multiattack option fires every round a cluster exists, up to
+# this many casts: "use this ability up to X times when situation Z"). Plus one
+# each of 1st/2nd.
 [resources.slot_1]
 uses = 1
 [resources.slot_2]
 uses = 1
 [resources.slot_3]
-uses = 1
+uses = 3
 
 [abilities.fire_bolt]
 kind = "attack"
@@ -89,10 +93,14 @@ area = { shape = "cube", size_ft = 15, level = 1 }
 costs = { resource = "slot_1", amount = 1 }
 # NOTE: RAW also pushes failed targets 10 ft; push is deferred (logged in plan).
 
-# Each leveled spell is its own multiattack option. The EvokerBrainL6 hatch
-# forces the choice each turn; the `when` floors (slot present + a 2+ area) only
-# matter if the hatch ever falls through. `standard` (Fire Bolt cantrip) is the
-# fallback when no leveled cast is worthwhile.
+# Each leveled spell is its own multiattack option — the declarative
+# "use ability A when situation Z, up to `costs` times" pattern. Selection is
+# highest-priority ELIGIBLE option: Fireball outranks the rest, so as long as a
+# 2+ cluster exists and a 3rd-level slot remains, the wizard casts Fireball
+# EVERY round until all three slots are gone (the emergency feast), then Shatter,
+# then Thunder Wave, then the cantrip. `aoe_targets(...)` is Sculpt-aware, so the
+# cluster it counts can include the mob dogpiling the melee (allies auto-succeed).
+# Raise a `when` threshold to make the wizard hold fire for bigger clusters.
 [multiattack.cast_fireball]
 actions = ["fireball"]
 when = "resource_available('slot_3') and aoe_targets('fireball') >= 2"
@@ -115,9 +123,6 @@ priority = 0
 
 [behavior]
 tactic = "kite"
-
-[behavior.custom]
-handler = "python:dnd5e_behaviors.evoker_wizard.EvokerBrainL6"
 
 # Shield (reaction): +5 AC until the wizard's next turn, cast in response to
 # being attacked. Two charges — the user's "once if attacked while below half
