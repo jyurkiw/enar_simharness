@@ -118,5 +118,14 @@ values = [
   ],
 ]
 
+# Smash-and-grab: once the seal is broken, the party retreats toward the south
+# doors, fights one round of cover fire, and is gone. Success (`extracted`) =
+# seal secured AND nobody down. This is what turns the fight from a stand-and-die
+# attrition slog into "grab it and run".
+[extraction]
+objective = "confessio_seal"
+exit = [12, 39]
+cover_rounds = 1
+
 [output]
 report = ["totals", "survival"]

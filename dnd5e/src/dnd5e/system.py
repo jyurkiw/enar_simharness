@@ -101,17 +101,22 @@ class GameState:
     turn_order: list           # instance_name, in initiative order
     flags: FlagBag = field(default_factory=FlagBag)
     light_produced: bool = False   # `light_plan` fires at most once per trial
+    retreat_started: Optional[int] = None   # round the party began its extraction retreat
 
 
 class Dnd5eSystem:
     def __init__(self, *, board, roster: list, max_rounds: int, hp_mode: str = "average",
                  focus: Optional[dict] = None, obscurement: tuple = (),
-                 light_plan: Optional[object] = None, reinforcements: tuple = ()) -> None:
+                 light_plan: Optional[object] = None, reinforcements: tuple = (),
+                 extraction: Optional[object] = None) -> None:
         self.board = board
         self.roster = roster
         self.max_rounds = max_rounds
         self.hp_mode = hp_mode
         self.focus = dict(focus or {})
+        # `[extraction]` (loader.ExtractionSpec, duck-typed): a smash-and-grab
+        # objective + retreat. None for ordinary deathmatch sims.
+        self.extraction = extraction
         # Reinforcement waves: tuple[(round_index, tuple[RosterSlot]), ...],
         # spawned at the start of their round by turn_order (design: the cathedral
         # guard waves arriving from the back). Pre-expanded by the loader.
@@ -202,6 +207,25 @@ class Dnd5eSystem:
                 self._prime(c, game.combat_ctx, resolver)
                 game.turn_order.append(c.instance_name)  # act at the tail this round
 
+    def _check_extraction(self, ctx: TrialContext) -> None:
+        """Drive the smash-and-grab: once the objective is broken, flag the party
+        retreating (so movement flees to the exit and Shield's retreat trigger
+        arms), then end the trial after `cover_rounds` — the "one round of cover
+        fire, then you're gone" rule. finalize_trial scores `extracted`."""
+        if self.extraction is None:
+            return
+        game: GameState = ctx.game
+        obj = game.creatures.get(self.extraction.objective)
+        if obj is None:
+            return
+        if game.retreat_started is None:
+            if obj.is_down:                       # objective secured -> run for it
+                game.retreat_started = ctx.round_index
+                game.combat_ctx.set_flag("party_retreating", scope="trial")
+        elif ctx.round_index >= game.retreat_started + self.extraction.cover_rounds:
+            # Cover round(s) done — they're gone. finalize_trial scores it.
+            game.combat_ctx.end_trial()
+
     def turn_order(self, ctx: TrialContext) -> list:
         # Called exactly once per round, at its start (runner.py's
         # `_begin_round`) — clear round-scoped flags, spawn any due reinforcement
@@ -213,6 +237,7 @@ class Dnd5eSystem:
         for c in game.creatures.values():
             c.round_scratch.clear()
         self._spawn_reinforcements(ctx)
+        self._check_extraction(ctx)
         game.battlefield.refresh_auras(ctx.round_index)
         self._sync_obscurement(game)
         return game.turn_order
@@ -267,8 +292,16 @@ class Dnd5eSystem:
                 scope = ConcreteScope(behavior_ctx, actor)
                 dest = escape_hatch.resolve(custom).plan_movement(actor, scope)
             before = actor.coord
+            # A retreating party member flees toward the exit (still firing
+            # cover at whatever's in range) instead of engaging.
+            retreat_dest = None
+            if (self.extraction is not None and actor.side == self.extraction.party_side
+                    and game.flags.has("party_retreating")):
+                retreat_dest = self.extraction.exit
             if dest is not None:
                 movement.move_to_cell(actor, dest, game.battlefield)
+            elif retreat_dest is not None:
+                movement.move_to_cell(actor, retreat_dest, game.battlefield)
             else:
                 movement.apply_tactic(actor.statblock.behavior.tactic, actor, targets[0], game.battlefield,
                                       max_range_ft=ability.range_normal)
@@ -306,6 +339,15 @@ class Dnd5eSystem:
         # `end_trial`'s optional `outcome` dict (design doc 03 section 4)
         # merges last, so a retreat/flee sim can add its own columns
         # (e.g. `retreated`) on top of the standard ones above.
+        # Extraction scoring (always present when `[extraction]` is configured,
+        # whether the trial ended by escape, wipe, or round limit).
+        if self.extraction is not None:
+            obj = game.creatures.get(self.extraction.objective)
+            secured = obj is not None and obj.is_down
+            party = game.battlefield.members(self.extraction.party_side)
+            nobody_down = bool(party) and not any(m.is_down for m in party)
+            outcome["secured"] = int(secured)
+            outcome["extracted"] = int(secured and nobody_down)
         outcome.update(game.combat_ctx.trial_outcome)
         return outcome
 

@@ -34,7 +34,7 @@ def _build_system_and_runner(spec, *, seed=None, trials=None):
     system = Dnd5eSystem(board=spec.board, roster=spec.roster, max_rounds=spec.max_rounds,
                          hp_mode=spec.hp_mode, focus=spec.focus,
                          obscurement=spec.obscurement, light_plan=spec.light_plan,
-                         reinforcements=spec.reinforcements)
+                         reinforcements=spec.reinforcements, extraction=spec.extraction)
     names = [slot.instance_name for slot in spec.roster]
     side_of = {slot.instance_name: slot.side for slot in spec.roster}
     # Reinforcement arrivals must be known to the ledger (side attribution) even

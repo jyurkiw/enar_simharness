@@ -463,6 +463,20 @@ class LightPlanSpec:
 
 
 @dataclass(frozen=True)
+class ExtractionSpec:
+    """`[extraction]` (a smash-and-grab objective): the party breaks the
+    `objective` creature, then RETREATS toward `exit`, fights `cover_rounds`
+    rounds, and the trial ends — success (`extracted`) = objective secured AND
+    nobody on `party_side` is down. Turns a stand-and-die fight into "grab it and
+    get out"."""
+
+    objective: str
+    exit: tuple           # (x, y) cell the party flees toward
+    cover_rounds: int = 1
+    party_side: str = "party"
+
+
+@dataclass(frozen=True)
 class SimulationSpec:
     name: str
     board: object  # dnd_board.Board
@@ -476,6 +490,7 @@ class SimulationSpec:
     obscurement: tuple = ()               # tuple[ObscurementSpec, ...]
     light_plan: Optional[LightPlanSpec] = None
     reinforcements: tuple = ()            # tuple[(round_index, tuple[RosterSlot]), ...]
+    extraction: Optional["ExtractionSpec"] = None
 
 
 def _resolve_creature_path(name: str, *, sim_dir: Path, sources: list) -> Path:
@@ -630,10 +645,18 @@ def build_simulation(cfg: dict, *, sim_dir: Path, name_fallback: str,
                                             side=wside, start=start, tags=()))
             reinforcements.append((wr, tuple(slots)))
 
+    extraction = None
+    if "extraction" in cfg:
+        ex = cfg["extraction"]
+        require_keys(ex, ["objective", "exit"], where=f"{path} [extraction]")
+        extraction = ExtractionSpec(objective=ex["objective"], exit=tuple(ex["exit"]),
+                                    cover_rounds=ex.get("cover_rounds", 1),
+                                    party_side=ex.get("party_side", "party"))
+
     return SimulationSpec(
         name=cfg.get("name", name_fallback), board=board, roster=roster,
         trials=sim["trials"], max_rounds=sim["max_rounds"], seed=sim["seed"],
         hp_mode=hp_mode, focus=focus, output=cfg.get("output", {}),
         obscurement=tuple(obscurement), light_plan=light_plan,
-        reinforcements=tuple(reinforcements),
+        reinforcements=tuple(reinforcements), extraction=extraction,
     )

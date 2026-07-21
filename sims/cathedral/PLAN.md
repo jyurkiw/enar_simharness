@@ -168,3 +168,34 @@ reliably reaches the objective. **Remaining lever:** the retreat/escape model
 (break in -> grab -> everyone runs -> 1 cover round -> gone). Because success is
 currently "nobody down after 10 rounds of standing and fighting", modeling the
 actual retreat should push extraction well up from 15/38%.
+
+## UPDATE — retreat / extraction model (step 14)
+
+New first-class `[extraction]` scenario block (loader.ExtractionSpec + system):
+```toml
+[extraction]
+objective = "confessio_seal"   # the creature whose destruction = "box secured"
+exit = [12, 39]                # party flees toward this cell
+cover_rounds = 1               # rounds of cover fire after securing, then gone
+```
+Once the objective is down, the system sets `party_retreating` (arms Shield's
+2nd trigger too), party members flee toward `exit` (still firing cover), and after
+`cover_rounds` the trial ends. `finalize_trial` scores **`secured`** (box grabbed)
+and **`extracted`** (secured AND nobody down) — the encounter's own get-away rule.
+
+Result (500 trials/party), the smash-and-grab finally modeled:
+
+| metric | STANDARD | ALTERNATE |
+|---|---|---|
+| secured (reached + grabbed the box) | 94% | 96% |
+| **extracted clean** (nobody down) | **33%** | **17%** |
+| any PC down | 66% | 83% |
+| full wipe | **4%** | **1%** |
+
+The fight is now what the brief wanted: reaching and grabbing the box is nearly
+automatic, a total wipe almost never happens, and getting EVERYONE out clean is
+the genuine challenge. Tactical finding: the ranged-heavier standard party
+extracts cleaner (33%) than the all-melee-front alternate (17%), which commits
+more bodies deep and eats more casualties on the way out. Levers to raise the
+clean rate: `cover_rounds`, party composition, and the still-deferred Paladin
+Aura of Protection (would shore up the alternate party's saves).

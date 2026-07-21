@@ -386,3 +386,21 @@ spawn = "monsters"
 ''')
     spec = load_simulation(path)
     assert spec.board.meta["name"] == "plain_room"
+
+
+def test_extraction_block_parses(tmp_path):
+    """[extraction] -> ExtractionSpec on the simulation spec."""
+    from dnd5e.loader import load_simulation
+    sim_dir = make_sim_dir(tmp_path)
+    write_creature(sim_dir, "hero", SIMPLE_ABILITY)
+    write_creature(sim_dir, "seal", SIMPLE_ABILITY)
+    tables = (
+        '[[combatants]]\ncreature = "hero"\nside = "party"\nspawn = "party"\n'
+        '[[combatants]]\ncreature = "seal"\nside = "monsters"\nspawn = "monsters"\n'
+        '[extraction]\nobjective = "seal"\nexit = [0, 0]\ncover_rounds = 2\n'
+    )
+    spec = load_simulation(sim_toml(sim_dir, tables=tables))
+    assert spec.extraction is not None
+    assert spec.extraction.objective == "seal"
+    assert spec.extraction.exit == (0, 0)
+    assert spec.extraction.cover_rounds == 2
