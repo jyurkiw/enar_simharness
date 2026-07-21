@@ -1,0 +1,45 @@
+# Cathedral Guard — MM Knight, CR 3. Standard 2024 MM values (flag for exact
+# SRD check). Plate-armored line infantry: AC 18, 2 greatsword swings a turn.
+name = "cathedral_guard"
+display_name = "Cathedral Guard"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 3
+
+[stats]
+strength = 16
+dexterity = 11
+constitution = 14
+intelligence = 11
+wisdom = 11
+charisma = 15
+ac = 18
+speed = 30
+initiative_bonus = 0
+
+[stats.health]
+average = 52
+hit_dice = "8d8+16"
+
+[stats.senses]
+passive_perception = 10
+
+[stats.saves]
+constitution = 4
+wisdom = 2
+
+[abilities.greatsword]
+kind = "attack"
+to_hit = 5
+damage = "2d6+3"
+damage_type = "slashing"
+requires_sight = false
+
+[multiattack.standard]
+actions = ["greatsword", "greatsword"]
+priority = 0
+
+[behavior]
+tactic = "engage"

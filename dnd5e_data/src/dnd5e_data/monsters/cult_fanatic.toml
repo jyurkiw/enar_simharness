@@ -1,0 +1,56 @@
+# Cult Fanatic — MM Cult Fanatic, CR 2. Standard 2024 MM values. Two dagger
+# jabs a turn, and a round-1 Hold Person to lock down a front-liner (modeled as
+# a one-round Paralysis on a failed Wisdom save — no concentration tracked, so
+# it's a fixed one-round window rather than a sustained hold).
+name = "cult_fanatic"
+display_name = "Cult Fanatic"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 2
+
+[stats]
+strength = 11
+dexterity = 14
+constitution = 12
+intelligence = 10
+wisdom = 13
+charisma = 14
+ac = 13
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 33
+hit_dice = "6d8+6"
+
+[stats.senses]
+passive_perception = 11
+
+[abilities.dagger]
+kind = "attack"
+to_hit = 4
+damage = "1d4+2"
+damage_type = "piercing"
+requires_sight = false
+
+[abilities.hold_person]
+kind = "save"
+ability = "wisdom"
+dc = 12
+targets = "enemies"
+max_targets = 1
+on_fail = [ { effect = "attach_condition", condition = "paralyzed", expires = "start_of_source_next_turn" } ]
+
+[multiattack.hold_opener]
+actions = ["hold_person"]
+when = "round() == 1"
+priority = 10
+
+[multiattack.standard]
+actions = ["dagger", "dagger"]
+priority = 0
+
+[behavior]
+tactic = "engage"

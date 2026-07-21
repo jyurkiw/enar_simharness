@@ -1,0 +1,49 @@
+# Cult Agitator — MM Spy, CR 1. Standard 2024 MM values. A skirmisher: two
+# shortsword jabs and Sneak Attack (2d6) once a turn when a pack-mate flanks the
+# target — the same adjacency gate the wolves/werewolves use.
+name = "cult_agitator"
+display_name = "Cult Agitator"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 1
+
+[stats]
+strength = 10
+dexterity = 15
+constitution = 10
+intelligence = 12
+wisdom = 14
+charisma = 16
+ac = 12
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 27
+hit_dice = "6d8"
+
+[stats.senses]
+passive_perception = 16
+
+[abilities.shortsword]
+kind = "attack"
+to_hit = 4
+damage = "1d6+2"
+damage_type = "piercing"
+requires_sight = false
+# Sneak Attack: +2d6 once per turn when an ally is adjacent to the target
+# (flanking stand-in), modeled like the rogue's — a damage rider gated by a
+# once-per-turn marker.
+on_hit = [
+  { effect = "damage_rider", damage = "2d6", damage_type = "piercing", name = "sneak_attack", when = "count(allies_within_of(target, 5)) > 0 and not turn_marked('sneak')" },
+  { effect = "mark_turn", key = "sneak", when = "count(allies_within_of(target, 5)) > 0 and not turn_marked('sneak')" },
+]
+
+[multiattack.standard]
+actions = ["shortsword", "shortsword"]
+priority = 0
+
+[behavior]
+tactic = "engage"

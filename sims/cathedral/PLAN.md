@@ -56,7 +56,7 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 ## Checklist
 
 - [x] **00** Plan doc + branch (`cathedral-00-plan`)
-- [ ] **01** Enemy statblocks: cathedral_guard, priest_acolyte, cult_fanatic, cult_agitator, cultist, priest (`cathedral-01-enemies`)
+- [x] **01** Enemy statblocks: cathedral_guard, priest_acolyte, cult_fanatic, cult_agitator, cultist, priest (`cathedral-01-enemies`)
 - [ ] **02** Level-6 PC copies of all 8 archetypes (`cathedral-02-pcs-l6`)
 - [ ] **03** Cathedral board (25×40, aisle + pews + doors) (`cathedral-03-board`)
 - [ ] **04** Minimal deathmatch sim runs to 10 rounds — MILESTONE (`cathedral-04-deathmatch`)

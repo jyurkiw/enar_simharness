@@ -1,0 +1,41 @@
+# Cultist — MM Cultist, CR 1/8. Standard 2024 MM values. Fragile mob body
+# (9 HP): value is bulk and bodies to soak attacks, not damage.
+name = "cultist"
+display_name = "Cultist"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 0.125
+
+[stats]
+strength = 11
+dexterity = 12
+constitution = 10
+intelligence = 10
+wisdom = 11
+charisma = 10
+ac = 12
+speed = 30
+initiative_bonus = 1
+
+[stats.health]
+average = 9
+hit_dice = "2d8"
+
+[stats.senses]
+passive_perception = 10
+
+[abilities.sickle]
+kind = "attack"
+to_hit = 3
+damage = "1d6+1"
+damage_type = "slashing"
+requires_sight = false
+
+[multiattack.standard]
+actions = ["sickle"]
+priority = 0
+
+[behavior]
+tactic = "engage"

@@ -1,0 +1,59 @@
+# Priest Acolyte — MM Acolyte, CR 1/4. Standard 2024 MM values. A support body:
+# Sacred Flame from range, and a Cure Wounds to pull a downed cultist back up —
+# the reason to clear them early, since they make the horde sticky.
+name = "priest_acolyte"
+display_name = "Priest Acolyte"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+cr = 0.25
+
+[stats]
+strength = 10
+dexterity = 10
+constitution = 10
+intelligence = 10
+wisdom = 14
+charisma = 11
+ac = 13
+speed = 30
+initiative_bonus = 0
+
+[stats.health]
+average = 11
+hit_dice = "2d8+2"
+
+[stats.senses]
+passive_perception = 12
+
+[abilities.mace]
+kind = "attack"
+to_hit = 2
+damage = "1d6"
+damage_type = "bludgeoning"
+requires_sight = false
+
+[abilities.sacred_flame]
+kind = "save"
+ability = "dexterity"
+dc = 12
+damage = "1d8"
+damage_type = "radiant"          # no half on save (fail = full, success = none)
+
+[abilities.cure_wounds]
+kind = "heal"
+amount = "2d8+2"
+targets = "downed_allies"        # raise a dying cultist, not "heal the nearest enemy"
+
+[multiattack.triage]
+actions = ["cure_wounds"]
+when = "count(downed_allies) > 0"
+priority = 20
+
+[multiattack.standard]
+actions = ["sacred_flame"]
+priority = 0
+
+[behavior]
+tactic = "kite"
