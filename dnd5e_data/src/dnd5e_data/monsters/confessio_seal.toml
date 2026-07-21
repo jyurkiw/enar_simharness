@@ -1,0 +1,35 @@
+# The concrete seal over the confessio — an inert destructible OBJECT, not a
+# combatant: AC 14, 20 HP, no actions (empty multiattack -> it never takes a
+# turn). Placed on the monsters' side so the PCs can attack it to break in;
+# tagged "objective" so the SealBreaker hatch steers a bruiser onto it. Breaking
+# it (0 HP) is "the confessio is open" — the box is then grabbed and the party
+# runs (modeled at the sim level as: seal broken + nobody down = extraction).
+name = "confessio_seal"
+display_name = "Sealed Confessio"
+tags = ["objective"]
+
+[classification]
+size = "Medium"
+type = "Object"
+cr = 0
+
+[stats]
+strength = 10
+dexterity = 1
+constitution = 10
+intelligence = 1
+wisdom = 1
+charisma = 1
+ac = 14
+speed = 0
+initiative_bonus = -5
+
+[stats.health]
+average = 20
+hit_dice = "3d8+6"
+
+[stats.senses]
+passive_perception = 0
+
+[behavior]
+tactic = "hold"

@@ -65,7 +65,7 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 - [x] **07** Sculpt Spells (allies auto-succeed up to 1+level) (`cathedral-07-sculpt`)
 - [x] **08** Shield reaction spell (+5 AC, gated, 2 uses) (`cathedral-08-shield`)
 - [x] **09** Reinforcement waves (mid-trial spawn, r6 + every 3) (`cathedral-09-reinforcements`)
-- [ ] **10** Extraction objective: seal object, box carry, retreat/escape win (`cathedral-10-extraction`)
+- [x] **10** Extraction objective: seal object, box carry, retreat/escape win (`cathedral-10-extraction`)
 - [ ] **11** Full sim wired + 10-round report + findings (`cathedral-11-run`)
 
 ## Open questions / assumptions (resolve in the morning)
