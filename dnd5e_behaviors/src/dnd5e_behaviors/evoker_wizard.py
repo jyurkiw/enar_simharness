@@ -70,11 +70,12 @@ class EvokerBrain:
         rnd = view.round_index
 
         # A clean line on 2+ foes is the shot we built the feature for.
-        if aoe.best_line(bf, me, length, allow_allies=SCULPT_SPELLS, min_enemies=2) is not None \
+        cap = 999 if SCULPT_SPELLS else 0
+        if aoe.best_line(bf, me, length, max_allies=cap, min_enemies=2) is not None \
                 and self._willing(view, CAST_CHANCE_MULTI, rnd):
             return "blast"
         # Otherwise consider spending it on a lone target (still no friendly fire).
-        if aoe.best_line(bf, me, length, allow_allies=SCULPT_SPELLS, min_enemies=1) is not None \
+        if aoe.best_line(bf, me, length, max_allies=cap, min_enemies=1) is not None \
                 and self._willing(view, CAST_CHANCE_SOLO, rnd):
             return "blast"
         return "standard"
@@ -132,7 +133,8 @@ class EvokerBrainL6:
                 ab = me.statblock.abilities.get(spell)
                 if ab is None or ab.area is None or me.resources.get(slot, 0) <= 0:
                     continue
-                if aoe.best_area(bf, me, ab.area, allow_allies=False, min_enemies=min_enemies) is not None:
+                limit = aoe.sculpt_limit(me, ab.area)   # Sculpt: aim through 1+level allies
+                if aoe.best_area(bf, me, ab.area, max_allies=limit, min_enemies=min_enemies) is not None:
                     return opt
             return None
 

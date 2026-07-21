@@ -10,6 +10,8 @@
 # The EvokerBrainL6 hatch picks which to cast and where, Sculpt-aware.
 name = "evoker_wizard_l6"
 display_name = "Evoker Wizard (Lv6)"
+# Sculpt Spells: aim evocations through up to 1+level allies (they take no damage).
+tags = ["sculpt_spells"]
 
 [classification]
 level = 6
@@ -53,7 +55,7 @@ dc = 15
 damage = "8d6"
 damage_type = "fire"
 half_on_save = true
-area = { shape = "sphere", radius_ft = 20, range_ft = 150 }
+area = { shape = "sphere", radius_ft = 20, range_ft = 150, level = 3 }
 costs = { resource = "slot_3", amount = 1 }
 
 [abilities.lightning_bolt]                 # 3rd level — 100-ft line, DC 15 Dex
@@ -63,7 +65,7 @@ dc = 15
 damage = "8d6"
 damage_type = "lightning"
 half_on_save = true
-area = { shape = "line", length_ft = 100 }
+area = { shape = "line", length_ft = 100, level = 3 }
 costs = { resource = "slot_3", amount = 1 }
 
 [abilities.shatter]                        # 2nd level — 10-ft sphere, DC 15 Con
@@ -73,7 +75,7 @@ dc = 15
 damage = "3d8"
 damage_type = "thunder"
 half_on_save = true
-area = { shape = "sphere", radius_ft = 10, range_ft = 60 }
+area = { shape = "sphere", radius_ft = 10, range_ft = 60, level = 2 }
 costs = { resource = "slot_2", amount = 1 }
 
 [abilities.thunderwave]                     # 1st level — 15-ft cube from caster, DC 15 Con
@@ -83,7 +85,7 @@ dc = 15
 damage = "2d8"
 damage_type = "thunder"
 half_on_save = true
-area = { shape = "cube", size_ft = 15 }
+area = { shape = "cube", size_ft = 15, level = 1 }
 costs = { resource = "slot_1", amount = 1 }
 # NOTE: RAW also pushes failed targets 10 ft; push is deferred (logged in plan).
 

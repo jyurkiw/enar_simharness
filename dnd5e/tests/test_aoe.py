@@ -81,21 +81,21 @@ def test_best_line_avoids_a_line_through_an_ally(tmp_path):
     south = creature("s", "monsters", 0, 2)     # a lone clean foe due south
     bf = Battlefield([wiz, ally, east1, east2, south], board=b)
     # 2+ enemies only exist on the east row, which is fouled by the ally:
-    assert aoe.best_line(bf, wiz, 20, allow_allies=False, min_enemies=2) is None
+    assert aoe.best_line(bf, wiz, 20, max_allies=0, min_enemies=2) is None
     # a clean solo line still exists (south):
-    choice = aoe.best_line(bf, wiz, 20, allow_allies=False, min_enemies=1)
+    choice = aoe.best_line(bf, wiz, 20, max_allies=0, min_enemies=1)
     assert choice is not None and {e.instance_name for e in choice[0]} == {"s"}
 
 
 def test_best_line_with_sculpt_allows_the_ally_line(tmp_path):
-    """Future Sculpt Spells: allow_allies=True re-opens the fouled 2-enemy row."""
+    """Future Sculpt Spells: max_allies>=1 re-opens the fouled 2-enemy row."""
     b = board(tmp_path)
     wiz = creature("wiz", "party", 0, 0)
     ally = creature("ally", "party", 1, 0)
     east1 = creature("e1", "monsters", 2, 0)
     east2 = creature("e2", "monsters", 3, 0)
     bf = Battlefield([wiz, ally, east1, east2], board=b)
-    choice = aoe.best_line(bf, wiz, 20, allow_allies=True, min_enemies=2)
+    choice = aoe.best_line(bf, wiz, 20, max_allies=9, min_enemies=2)
     assert choice is not None and {e.instance_name for e in choice[0]} == {"e1", "e2"}
 
 
@@ -155,10 +155,23 @@ def test_sphere_respects_friendly_fire_and_sculpt(tmp_path):
     # No clean 2-enemy sphere (the ally is amid them):
     assert aoe.best_area(bf, wiz, {"shape": "sphere", "radius_ft": 20, "range_ft": 150},
                          min_enemies=2) is None
-    # Sculpt (allow_allies) re-opens it:
+    # Sculpt (max_allies>0) re-opens it:
     choice = aoe.best_area(bf, wiz, {"shape": "sphere", "radius_ft": 20, "range_ft": 150},
-                           allow_allies=True, min_enemies=2)
+                           max_allies=9, min_enemies=2)
     assert choice is not None and len(choice[0]) == 2
+
+
+def test_sculpt_limit_caps_protected_allies(tmp_path):
+    """max_allies is a hard cap: a line catching 2 allies is fine at 2 but
+    rejected at 1 — Sculpt shields only 1 + spell level of them."""
+    b = board(tmp_path)
+    wiz = creature("wiz", "party", 0, 0)
+    a1 = creature("a1", "party", 1, 0)
+    a2 = creature("a2", "party", 2, 0)               # two allies on the east row
+    foes = [creature(f"f{i}", "monsters", x, 0) for i, x in enumerate((3, 4))]
+    bf = Battlefield([wiz, a1, a2, *foes], board=b)
+    assert aoe.best_line(bf, wiz, 20, max_allies=1, min_enemies=2) is None    # 2 allies > cap 1
+    assert aoe.best_line(bf, wiz, 20, max_allies=2, min_enemies=2) is not None  # cap 2 allows it
 
 
 def test_sphere_out_of_range_is_none(tmp_path):

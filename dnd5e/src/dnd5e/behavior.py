@@ -364,7 +364,10 @@ def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> l
 
 
 def _area_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> list:
-    choice = aoe.best_area(ctx.battlefield, actor, ability.area, allow_allies=False, min_enemies=1)
+    # Sculpt Spells lets an evoker aim through up to 1+level of its own allies
+    # (they take no damage); without it, any ally in the area disqualifies the aim.
+    limit = aoe.sculpt_limit(actor, ability.area)
+    choice = aoe.best_area(ctx.battlefield, actor, ability.area, max_allies=limit, min_enemies=1)
     return choice[0] if choice is not None else []
 
 

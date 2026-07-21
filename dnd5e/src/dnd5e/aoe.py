@@ -14,10 +14,12 @@ Two layers, kept separate on purpose:
     most enemies subject to the friendly-fire rule. This is the standard grid-AoE
     trick — you never need to try a direction that doesn't pass through a target.
 
-Friendly fire matters because a 5th-level evoker has no Sculpt Spells yet: a PC
-caught in the line takes the hit. `allow_allies` is the seam for adding Sculpt
-later — flip it True (for the allies Sculpt would protect) and ally-hitting
-lines become acceptable again.
+Friendly fire lives entirely in the *aim*: only enemies are ever returned as
+targets, so an ally in an area simply isn't hit. The `max_allies` knob is how
+many allies a placement may include — 0 means friendly-fire-safe (a PC in the
+area disqualifies it), and Sculpt Spells raises it to `1 + spell level` via
+`sculpt_limit` (an evoker shields that many allies caught in the blast, letting
+it drop Fireball right on the melee).
 """
 
 from __future__ import annotations
@@ -64,7 +66,7 @@ def get_targets(bf, caster, aim: tuple, length_cells: int) -> tuple[list, list]:
     return allies, enemies
 
 
-def best_line(bf, caster, length_cells: int, *, allow_allies: bool = False,
+def best_line(bf, caster, length_cells: int, *, max_allies: int = 0,
               min_enemies: int = 1) -> Optional[tuple[list, tuple]]:
     """The best-aimed line from the caster's current cell: `(enemies, aim)` for
     the ray hitting the most enemies while respecting the friendly-fire rule, or
@@ -77,8 +79,8 @@ def best_line(bf, caster, length_cells: int, *, allow_allies: bool = False,
         if foe.coord is None:
             continue
         allies, enemies = get_targets(bf, caster, foe.coord, length_cells)
-        if allies and not allow_allies:
-            continue  # would catch a PC — invalid without Sculpt Spells
+        if len(allies) > max_allies:
+            continue  # more allies than Sculpt can shield -> unacceptable
         if len(enemies) < min_enemies:
             continue
         if best is None or len(enemies) > len(best[0]):
@@ -138,7 +140,7 @@ def split_cells(bf, caster, cells: set) -> tuple[list, list]:
     return allies, enemies
 
 
-def best_sphere(bf, caster, radius_ft: int, range_ft: int, *, allow_allies: bool = False,
+def best_sphere(bf, caster, radius_ft: int, range_ft: int, *, max_allies: int = 0,
                 min_enemies: int = 1) -> Optional[tuple[list, tuple]]:
     """Best sphere placement: `(enemies, center)`. Candidate centers are the live
     enemy cells within `range_ft` of the caster — centering on a foe inside a
@@ -150,7 +152,7 @@ def best_sphere(bf, caster, radius_ft: int, range_ft: int, *, allow_allies: bool
         if foe.coord is None or bf.board.distance_ft(caster.coord, foe.coord) > range_ft:
             continue
         allies, enemies = split_cells(bf, caster, sphere_cells(bf.board, foe.coord, radius_ft))
-        if allies and not allow_allies:
+        if len(allies) > max_allies:
             continue
         if len(enemies) < min_enemies:
             continue
@@ -159,7 +161,7 @@ def best_sphere(bf, caster, radius_ft: int, range_ft: int, *, allow_allies: bool
     return best
 
 
-def best_cube(bf, caster, size_cells: int, *, allow_allies: bool = False,
+def best_cube(bf, caster, size_cells: int, *, max_allies: int = 0,
               min_enemies: int = 1) -> Optional[tuple[list, tuple]]:
     """Best of the four cube facings from the caster: `(enemies, direction)`."""
     if caster.coord is None:
@@ -167,7 +169,7 @@ def best_cube(bf, caster, size_cells: int, *, allow_allies: bool = False,
     best: Optional[tuple[list, tuple]] = None
     for d in _CUBE_DIRS:
         allies, enemies = split_cells(bf, caster, cube_cells(bf.board, caster.coord, d, size_cells))
-        if allies and not allow_allies:
+        if len(allies) > max_allies:
             continue
         if len(enemies) < min_enemies:
             continue
@@ -176,7 +178,7 @@ def best_cube(bf, caster, size_cells: int, *, allow_allies: bool = False,
     return best
 
 
-def best_area(bf, caster, area: dict, *, allow_allies: bool = False,
+def best_area(bf, caster, area: dict, *, max_allies: int = 0,
               min_enemies: int = 1) -> Optional[tuple[list, tuple]]:
     """Dispatch to the right shape. Returns `(enemies, aim)` or None. `aim` is a
     cell for line/sphere and a direction for cube (opaque to the caller — only
@@ -184,11 +186,23 @@ def best_area(bf, caster, area: dict, *, allow_allies: bool = False,
     shape = area.get("shape")
     if shape == "line":
         length_cells = bf.board.feet_to_cells(area["length_ft"])
-        return best_line(bf, caster, length_cells, allow_allies=allow_allies, min_enemies=min_enemies)
+        return best_line(bf, caster, length_cells, max_allies=max_allies, min_enemies=min_enemies)
     if shape == "sphere":
         return best_sphere(bf, caster, area["radius_ft"], area["range_ft"],
-                           allow_allies=allow_allies, min_enemies=min_enemies)
+                           max_allies=max_allies, min_enemies=min_enemies)
     if shape == "cube":
         size_cells = bf.board.feet_to_cells(area["size_ft"])
-        return best_cube(bf, caster, size_cells, allow_allies=allow_allies, min_enemies=min_enemies)
+        return best_cube(bf, caster, size_cells, max_allies=max_allies, min_enemies=min_enemies)
     raise ValueError(f"unknown area shape {shape!r}")
+
+
+def sculpt_limit(caster, area: dict) -> int:
+    """Sculpt Spells (evoker, 6th level): the caster can shield `1 + spell level`
+    allies caught in one of its evocation areas (they auto-succeed, take no
+    damage). Returns that many — the max allies a placement may include — or 0
+    without the `sculpt_spells` tag or a known spell `level` on the area. All of
+    the L6 evoker's area spells are evocations, so the tag is sufficient here;
+    a school field would be needed if a non-evocation area spell were added."""
+    if "level" in area and caster.has_tag("sculpt_spells"):
+        return 1 + int(area["level"])
+    return 0
