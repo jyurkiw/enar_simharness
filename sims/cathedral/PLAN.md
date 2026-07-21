@@ -138,3 +138,33 @@ deferred Paladin Aura (would help the alternate party's saves vs the casters).
   now knows wave names/sides (cli). Verified: wave-6 arrives and acts, monster
   damage 240->295. Wave-9 rarely fires in a deathmatch (trial ends first) — it'll
   matter more in the shorter extraction runs only if the party lingers.
+
+## UPDATE — objective targeting + emergency AoE (steps 12–13)
+
+Two general features added (in response to "melee-only objective" + "emergency
+Fireball feast"), plus a real bug fixed:
+
+- **BUG FIX:** statblock-level `tags` were dropped by the loader, so **Sculpt
+  Spells had been inert in-sim** the whole time. `has_tag` now unions statblock +
+  combatant tags. The L6 evoker's Sculpt is finally live.
+- **`engaged_by = [tags]`** (agent-scoped target reservation): only agents with a
+  matching tag target the creature, and they prioritize it; everyone else ignores
+  it (direct + AoE). Seal is `engaged_by=["breaker"]`; melee carry `breaker`.
+- **Emergency AoE is declarative**: `[multiattack.X]` `when=<situation>` + ability
+  `costs` + resource `uses=X` already means "use A up to X times in situation Z,
+  above the routine". Wizard's 3rd-level slots -> 3; dropped the forcing hatch so
+  Fireball fires every round a 2+ cluster exists until slots are gone.
+
+Result (500 trials/party):
+
+| metric | STANDARD | ALTERNATE |
+|---|---|---|
+| seal broken (REACH objective) | 94% | 96% |
+| extraction success (seal + nobody down) | 15% | 38% |
+| full wipe | 80% | 49% |
+
+From a guaranteed TPK to hard-but-survivable — and the smash-and-grab now
+reliably reaches the objective. **Remaining lever:** the retreat/escape model
+(break in -> grab -> everyone runs -> 1 cover round -> gone). Because success is
+currently "nobody down after 10 rounds of standing and fighting", modeling the
+actual retreat should push extraction well up from 15/38%.
