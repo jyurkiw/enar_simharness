@@ -1,0 +1,64 @@
+# Wolf, CR 1/4. Straight from the 2024 SRD (SRD_CC_v5.2.1, "Wolf").
+#
+# A fragile pack animal (11 HP) whose value in a mixed lycanthrope encounter is
+# entirely tactical, not durability:
+#   * Pack Tactics — advantage when a pack-mate is adjacent to the target
+#     (`advantage_when`, same as the Werewolf). Wolves and werewolves count as
+#     each other's allies, so they stack: every extra body on a target is one
+#     more attacker with advantage.
+#   * Knockdown — its bite leaves a Medium-or-smaller target Prone, which hands
+#     ADVANTAGE to every melee attacker on that target until it stands up (its
+#     next turn). This is the real reason to fold a couple of wolves into a
+#     werewolf pack: a wolf knocks a PC down, and the werewolves pile on with
+#     advantage. Modeled by attaching `prone` on hit; the PC stands up at the
+#     start of its own turn (system.py), so the pack's advantage window is the
+#     rest of the round.
+#
+# The "Medium or smaller" clause on the knockdown isn't gated here — the combat
+# model has no creature size, and every PC in these sims is Medium, so the bite
+# always knocks down. (A wolf biting a Large creature would over-apply; add a
+# size check if that ever matters.) These wolves also rush and fight to the
+# death alongside the werewolves.
+name = "wolf"
+display_name = "Wolf"
+
+[classification]
+size = "Medium"
+type = "Beast"
+cr = 0.25
+
+[stats]
+strength = 14
+dexterity = 15
+constitution = 12
+intelligence = 3
+wisdom = 12
+charisma = 6
+ac = 12
+speed = 40
+initiative_bonus = 2
+
+[stats.health]
+average = 11
+hit_dice = "2d8+2"
+
+[stats.senses]
+darkvision = 60
+passive_perception = 15
+
+[abilities.bite]
+kind = "attack"
+to_hit = 4
+damage = "1d6+2"
+damage_type = "piercing"
+requires_sight = false   # mundane weapon: can strike an unseen foe (single-target)
+advantage_when = "count(allies_within_of(target, 5)) > 0"   # Pack Tactics
+# Knockdown: a hit leaves the target Prone until it stands on its own next turn.
+on_hit = [ { effect = "attach_condition", condition = "prone" } ]
+
+[multiattack.standard]
+actions = ["bite"]
+priority = 0
+
+[behavior]
+tactic = "engage"

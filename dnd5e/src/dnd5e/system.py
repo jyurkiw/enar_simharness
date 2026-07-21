@@ -195,6 +195,14 @@ class Dnd5eSystem:
         if self._maybe_produce_light(actor, game, ctx):
             return  # producing light cost this creature its action
 
+        # Stand up from Prone at the start of the turn (RAW: costs half your
+        # movement; that fractional cost isn't modeled, but the important part
+        # — that a knocked-down creature is Prone until *its* next turn, so the
+        # pack gets advantage against it in between — is). The Wolf's bite is
+        # what applies it.
+        if actor.has_condition(conditions.PRONE):
+            actor.remove_condition(conditions.PRONE)
+
         self._offer_turn_start_reactions(actor, game, ctx)
 
         behavior_ctx = BehaviorContext(battlefield=game.battlefield, round_index=ctx.round_index,

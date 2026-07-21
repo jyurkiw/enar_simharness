@@ -653,3 +653,14 @@ def test_no_opportunity_attack_when_still_in_reach_or_not_moving(tmp_path):
     system._offer_opportunity_attacks(m, (1, 0), (1, 0), ctx.game, ctx)   # didn't move
     system._offer_opportunity_attacks(m, (1, 0), (1, 1), ctx.game, ctx)   # still adjacent
     assert m.current_damage == 0
+
+
+def test_prone_creature_stands_up_at_the_start_of_its_turn(tmp_path):
+    board = make_board(tmp_path)
+    system = build_system(board)
+    ctx = make_ctx([15, 10, 12, 5])
+    system.setup_trial(ctx)
+    fighter = ctx.game.creatures["fighter"]
+    fighter.add_condition(ConditionInstance(name=conditions.PRONE))
+    system.take_turn(ctx, "fighter")
+    assert not fighter.has_condition(conditions.PRONE)   # stood up before acting

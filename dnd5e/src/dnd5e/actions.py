@@ -195,6 +195,19 @@ class CombatContext:
             if target.instance_name != instance.source:
                 disadvantage = True
                 attacker.turn_scratch["attacked_other_than_source"] = True
+        in_reach = bf.in_reach(attacker, target)
+        # Prone (the Wolf's knockdown): a prone TARGET is easy meat in melee
+        # (advantage for an attacker in reach) but hard to hit at range
+        # (disadvantage); a prone ATTACKER swings at disadvantage. RAW. A prone
+        # attacker striking a prone target in melee cancels to a straight roll,
+        # which the resolver handles.
+        if attacker.has_condition(conditions.PRONE):
+            disadvantage = True
+        if target.has_condition(conditions.PRONE):
+            if in_reach:
+                advantage = True
+            else:
+                disadvantage = True
         # Outside melee reach, this is a ranged attack: subject to cover and
         # gated by range bands.
         #
@@ -210,7 +223,7 @@ class CombatContext:
         # opted into `targets = "enemies"` can shoot blind.
         # Full cover remains an auto-miss: there is no line to the target at all.
         cover_bonus = 0
-        if not bf.in_reach(attacker, target):
+        if not in_reach:
             if bf.has_full_cover(attacker, target):
                 return AttackOutcome(hit=False, crit=False, damage=0, target=target)
             if not bf.can_see(attacker, target):

@@ -659,3 +659,33 @@ def test_resolve_utility_ability_runs_effects(tmp_path):
                       effects=(EffectCall(effect="remove_condition", args={"condition": "prone"}),))
     resolve_ability(ctx, wizard, ability, [])
     assert not wizard.has_condition(conditions.PRONE)
+
+
+def test_prone_target_grants_melee_attacker_advantage(tmp_path):
+    """Prone (the Wolf's knockdown): an in-reach attacker has advantage against
+    a prone target (design doc 07 werewolf work)."""
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    a = make_creature("wolf", "monsters", 0, 0)
+    b = make_creature("pc", "party", 1, 0)          # adjacent = in reach
+    b.add_condition(ConditionInstance(name=conditions.PRONE))
+    ctx, _, _ = make_ctx(board, [5, 18, 4], [a, b])  # advantage keeps the 18
+    assert ctx.attack(a, b, bonus=0, damage="1d6").hit is True   # 18 >= ac 14
+
+
+def test_prone_target_imposes_disadvantage_on_ranged_attacker(tmp_path):
+    board = make_board(tmp_path, RANGED_BOARD, "ranged")
+    a = make_creature("archer", "party", 0, 0)
+    b = make_creature("pc", "monsters", 4, 0)        # 20 ft off = ranged
+    b.add_condition(ConditionInstance(name=conditions.PRONE))
+    ctx, _, _ = make_ctx(board, [18, 3], [a, b])     # disadvantage keeps the 3
+    out = ctx.attack(a, b, bonus=7, damage="1d8", normal_range=150, long_range=600)
+    assert out.hit is False                          # 3+7=10 < ac 14
+
+
+def test_prone_attacker_has_disadvantage(tmp_path):
+    board = make_board(tmp_path, OPEN_BOARD, "open")
+    a = make_creature("pc", "party", 0, 0)
+    a.add_condition(ConditionInstance(name=conditions.PRONE))
+    b = make_creature("wolf", "monsters", 1, 0)
+    ctx, _, _ = make_ctx(board, [18, 3], [a, b])     # disadvantage keeps the 3
+    assert ctx.attack(a, b, bonus=5, damage="1d8").hit is False  # 3+5=8 < ac 14
