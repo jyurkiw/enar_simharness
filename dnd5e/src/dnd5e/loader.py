@@ -163,6 +163,8 @@ def _validate_effect_args(call: EffectCall, *, where: str, known_conditions: fro
         require_keys(call.args, ["key"], where=where)
     elif call.effect == "make_attack":
         require_keys(call.args, ["ability"], where=where)
+    elif call.effect == "spend_resource":
+        require_keys(call.args, ["resource"], where=where)
 
 
 # Area-of-effect shapes the engine can target geometrically (aoe.py): a line

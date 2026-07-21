@@ -47,3 +47,22 @@ def test_stunned_skips_turn():
 def test_grappled_does_not_skip_turn_or_grant_advantage():
     assert conditions.GRAPPLED not in conditions.SKIPS_TURN
     assert conditions.GRAPPLED not in conditions.GRANTS_ATTACKERS_ADVANTAGE
+
+
+def test_ac_bonus_for_sums_shield_grant():
+    """Shield's grant_ac_bonus folds into the target's AC via ac_bonus_for."""
+    from dnd5e import conditions
+    from dnd5e.creature import ConditionInstance, Creature
+    from dnd5e.statblock import ConditionDef, EffectCall, Statblock, Stats
+
+    shielded = ConditionDef(name="shielded",
+                            grants=(EffectCall(effect="grant_ac_bonus", args={"amount": 5}),))
+    stats = Stats(strength=10, dexterity=10, constitution=10, intelligence=10, wisdom=10, charisma=10,
+                  ac=12, speed=30, initiative_bonus=0, proficiency=2, crit_range=20, reach=5,
+                  hit_dice=None, hp_average=10)
+    wiz = Creature(statblock=Statblock(name="w", display_name="w", classification={}, stats=stats),
+                   instance_name="w", side="party")
+    defs = {"shielded": shielded}
+    assert conditions.ac_bonus_for(wiz, condition_defs=defs) == 0
+    wiz.add_condition(ConditionInstance(name="shielded", source="w"))
+    assert conditions.ac_bonus_for(wiz, condition_defs=defs) == 5

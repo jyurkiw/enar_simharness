@@ -237,9 +237,11 @@ class CombatContext:
                         return AttackOutcome(hit=False, crit=False, damage=0, target=target)
                     if dist > normal_range:
                         disadvantage = True
+        # A temporary AC bonus from a condition on the target (Shield's +5).
+        ac_bonus = conditions.ac_bonus_for(target, condition_defs=self.condition_defs)
         bonus_dice, penalty_dice = conditions.d20_dice(c.name for c in attacker.conditions)
         roll = self.resolver.attack(
-            bonus, target.statblock.stats.ac + cover_bonus, crit_range=crit_range,
+            bonus, target.statblock.stats.ac + cover_bonus + ac_bonus, crit_range=crit_range,
             advantage=advantage, disadvantage=disadvantage,
             bonus_dice=bonus_dice, penalty_dice=penalty_dice,
         )

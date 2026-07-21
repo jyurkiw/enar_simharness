@@ -50,7 +50,7 @@ ACTION_EFFECTS = frozenset({
     "attach_condition", "remove_condition", "require_save", "set_flag", "end_trial",
     "emit_light", "limited_darkvision", "darkvision_immunity",
     "redirect_attack", "swap_positions", "damage_rider",
-    "reduce_damage", "mark_turn", "make_attack",
+    "reduce_damage", "mark_turn", "make_attack", "spend_resource",
 })
 
 ALL_EFFECTS = ACTION_EFFECTS
@@ -185,6 +185,16 @@ def _set_flag(args: dict, scope: EffectScope) -> None:
     scope.ctx.set_flag(args["flag"], scope=args.get("scope", "round"))
 
 
+def _spend_resource(args: dict, scope: EffectScope) -> None:
+    """Decrement a named resource on the effect's source (e.g. a reaction-cast
+    Shield spending one of its charges). The matching debit for a `when` gated
+    on `resource_available(...)`."""
+    src = scope.source
+    name, amount = args["resource"], int(args.get("amount", 1))
+    if name in src.resources:
+        src.resources[name] = max(0, src.resources[name] - amount)
+
+
 def _end_trial(args: dict, scope: EffectScope) -> None:
     scope.ctx.end_trial(outcome=args.get("outcome"))
 
@@ -282,4 +292,5 @@ _DISPATCH: dict[str, Callable[[dict, EffectScope], None]] = {
     "reduce_damage": _reduce_damage,
     "make_attack": _make_attack,
     "mark_turn": _mark_turn,
+    "spend_resource": _spend_resource,
 }

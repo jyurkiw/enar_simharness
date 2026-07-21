@@ -139,7 +139,7 @@ SKIPS_TURN = frozenset({STUNNED, PARALYZED, UNCONSCIOUS, PETRIFIED})
 GRANT_EFFECTS = frozenset({
     "grant_advantage_to_attackers", "grant_advantage_against",
     "impose_disadvantage", "impose_disadvantage_except_source",
-    "grant_self_advantage",
+    "grant_self_advantage", "grant_ac_bonus",
 })
 
 # Closed clock keywords a `[conditions.*].expires` may reference (design doc
@@ -188,3 +188,17 @@ def grants_for(creature: "Creature", grant_name: str, *,
         if any(g.effect == grant_name for g in cdef.grants):
             matches.append(instance)
     return matches
+
+
+def ac_bonus_for(creature: "Creature", *, condition_defs: dict) -> int:
+    """Sum of every `grant_ac_bonus` amount from conditions on `creature` — the
+    Shield spell's +5, folded into the target's AC by `actions.attack`."""
+    total = 0
+    for instance in creature.conditions:
+        cdef = condition_defs.get(instance.name)
+        if cdef is None:
+            continue
+        for g in cdef.grants:
+            if g.effect == "grant_ac_bonus":
+                total += int(g.args.get("amount", 0))
+    return total

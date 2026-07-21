@@ -118,3 +118,24 @@ tactic = "kite"
 
 [behavior.custom]
 handler = "python:dnd5e_behaviors.evoker_wizard.EvokerBrainL6"
+
+# Shield (reaction): +5 AC until the wizard's next turn, cast in response to
+# being attacked. Two charges — the user's "once if attacked while below half
+# health, once if attacked while everyone is retreating". The `party_retreating`
+# flag is raised by the extraction plan (cathedral step 10); until then only the
+# below-half trigger fires.
+[resources.shield_charges]
+uses = 2
+
+[conditions.shielded]
+grants = [ { effect = "grant_ac_bonus", amount = 5 } ]
+expires = "start_of_source_next_turn"
+
+[reactions.shield]
+trigger = "self_targeted_by_attack"
+when = "(hp_pct(self) < 0.5 or has_flag('party_retreating')) and resource_available('shield_charges')"
+uses_reaction = true
+effects = [
+  { effect = "attach_condition", condition = "shielded" },
+  { effect = "spend_resource", resource = "shield_charges" },
+]
