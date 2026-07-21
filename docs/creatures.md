@@ -101,6 +101,7 @@ option ineligible when the resource is exhausted), `uses_bonus_action`, `descrip
 | `max_targets` | How many to keep (default 1 for ordered pools). |
 | `requires_sight` | Whether the default pool is filtered to what the actor can see. Default `true`. |
 | `advantage_when` | An expression; if true at swing time (target in scope), the attack has advantage. |
+| `area` | A geometric area of effect (`{ shape = "line", length_ft = 100 }`) — see "Area of effect". |
 
 > ⚠️ **Two related traps, both about single- vs multi-target attacks:**
 >
@@ -122,6 +123,37 @@ pack-mate is adjacent to the target):
 ```toml
 advantage_when = "count(allies_within_of(target, 5)) > 0"
 ```
+
+### Area of effect
+
+`area` makes an ability *geometric* instead of picking from a pool: the caster aims the shape
+to catch the most enemies, and **every** enemy inside it becomes a target. Pair it with
+`kind = "save"` — each caught creature rolls its own save (this is the RAW "each creature in
+the line makes a Dexterity save"). No `targets`/`max_targets` needed; the geometry is the pool.
+
+```toml
+[abilities.lightning_bolt]
+kind = "save"
+ability = "dexterity"
+dc = 14
+damage = "8d6"
+half_on_save = true
+area = { shape = "line", length_ft = 100 }   # 100-ft, 5-ft-wide line from the caster
+```
+
+| Shape | Params | Notes |
+|---|---|---|
+| `line` | `length_ft` | A 5-ft-wide (one-cell) ray from the caster, aimed to clip the most foes; stops at walls. |
+
+Only `line` (Lightning Bolt) is modeled today; a foe *one cell off* the ray isn't caught, so
+it slightly under-counts a real table — but it captures what matters: a **clustered** pack eats
+one bolt across several bodies, a spread-out one doesn't. Cone/sphere would be added here.
+
+The aim is **friendly-fire-aware**: it only ever picks a line that hits **no allies** (a
+5th-level evoker has no Sculpt Spells, so a PC in the line takes the hit too). The geometry
+primitive behind this — `aoe.get_targets(...)`, which returns `(allies, enemies)` for a given
+aim — is reusable from a Python hook (see [python-hooks.md](python-hooks.md)); the evoker's
+"cast only on a clean 2+ line, up to its slot ceiling" logic is a hook, not `when` clauses.
 
 ## Multiattack
 

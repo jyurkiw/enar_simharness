@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from . import escape_hatch, expressions
+from . import aoe, escape_hatch, expressions
 from .battlefield import Battlefield
 from .creature import Creature
 from .dice import Resolver
@@ -60,6 +60,17 @@ class ConcreteScope:
         `plan_movement` needs board/occupancy queries the expression-function
         vocabulary doesn't cover (e.g. "farthest reachable cell from X")."""
         return self._ctx.battlefield
+
+    @property
+    def resolver(self):
+        """The trial's seeded dice, for a hatch that makes a *random* decision
+        (e.g. the evoker's per-round chance to spend a Lightning Bolt slot).
+        Always the trial stream — never Python's `random`."""
+        return self._ctx.resolver
+
+    @property
+    def round_index(self) -> int:
+        return self._ctx.round_index
 
     # ---- single-creature selectors -----------------------------------------
 
@@ -181,6 +192,17 @@ class ConcreteScope:
     def resource_available(self, name: str) -> bool:
         return self._self.resources.get(name, 0) > 0
 
+    def aoe_targets(self, ability_name: str) -> int:
+        """How many enemies this creature's area ability would catch RIGHT NOW,
+        aimed optimally from its current cell along a line that hits no allies.
+        Lets a `when` gate a spell on "is it worth a slot?" — e.g.
+        `aoe_targets('lightning_bolt') >= 2`. Returns 0 for an unknown or
+        non-area ability (so the gate simply never fires)."""
+        ability = self._self.statblock.abilities.get(ability_name)
+        if ability is None or ability.area is None:
+            return 0
+        return len(_area_targets(self._self, ability, self._ctx))
+
     def round_number(self) -> int:
         return self._ctx.round_index
 
@@ -274,6 +296,14 @@ def _costs_available(option: MultiattackOption, actor: Creature) -> bool:
 
 
 def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> list:
+    if ability.area is not None:
+        # Geometric area of effect (Lightning Bolt's line, etc.): the caster
+        # aims to catch the most enemies, and *every* enemy in the shape is a
+        # target — the save (`kind = "save"`) is then rolled once per target by
+        # actions.resolve_ability's per-target loop, exactly like the RAW "each
+        # creature in the line makes a Dexterity save".
+        return _area_targets(actor, ability, ctx)
+
     scope = ConcreteScope(ctx, actor)
     pool = _resolve_targets_selector(ability.targets, scope, ctx, requires_sight=ability.requires_sight)
     is_set_selector = ability.targets in SET_SELECTORS
@@ -317,6 +347,32 @@ def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> l
     if is_set_selector:
         return ordered[:ability.max_targets] if ability.max_targets else ordered
     return ordered[:ability.max_targets or 1]
+
+
+# -----------------------------------------------------------------------------
+# Area-of-effect targeting (design doc 04 — geometric shapes)
+# -----------------------------------------------------------------------------
+#
+# The geometry lives in `aoe.py`; here we just pick the best clean line. A
+# 5-ft-wide line on a 5-ft grid is one cell wide, so it's a single ray from the
+# caster, aimed (smartly, toward an enemy) to clip the most foes. Lines that
+# would also catch an ally are rejected — a 5th-level evoker has no Sculpt
+# Spells, so a PC in the line eats the bolt too. This slightly under-counts vs a
+# tabletop (a foe one cell off the ray isn't caught) but captures the thing that
+# matters: a clustered pack lets one bolt hit several bodies without frying the
+# party, a mixed scrum doesn't.
+
+
+def _area_length_cells(board, ability: Ability) -> int:
+    return board.feet_to_cells(ability.area["length_ft"])
+
+
+def _area_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> list:
+    if ability.area.get("shape") != "line":
+        raise ValueError(f"unknown area shape {ability.area.get('shape')!r}")  # loader validates
+    length_cells = _area_length_cells(ctx.battlefield.board, ability)
+    choice = aoe.best_line(ctx.battlefield, actor, length_cells, allow_allies=False, min_enemies=1)
+    return choice[0] if choice is not None else []
 
 
 def _resolve_targets_selector(targets_name: Optional[str], scope: ConcreteScope,

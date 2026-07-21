@@ -63,6 +63,7 @@ Bare names (no parentheses).
 | `enemies_within_of(who, ft)` / `allies_within_of(who, ft)` | Sets within `ft` of *another* creature |
 | `enemies_tagged('tag')` / `allies_tagged('tag')` | Sets by tag |
 | `resource_available('name')` | Resource pool not empty |
+| `aoe_targets('ability')` | Enemies the ability's area (Lightning Bolt's line) would catch from here, along a line hitting no allies; 0 if not an area ability |
 | `round()` | Current round number (1-based) |
 | `has_flag('name')` | A round/trial flag set by `set_flag` |
 | `turn_marked('key')` | A once-per-turn marker set by `mark_turn` |

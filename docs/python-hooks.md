@@ -57,6 +57,13 @@ only what you must. The handler is cached and shared across creatures and trials
   `view.downed_allies()`, `view.distance(a, b)`, `view.can_see(a, b)`,
   `view.has_condition(who, name)`, plus `view.battlefield` for board/occupancy queries and
   `view.eval("<expression>")` to reuse the declarative vocabulary.
+- `view.resolver` and `view.round_index` — for a hook that makes a *random, per-round* choice
+  (roll `view.resolver.roll("1d100")` off the trial's seeded stream, so runs stay
+  deterministic). The evoker's per-round chance to spend a Lightning Bolt slot uses these.
+- `aoe.get_targets(bf, caster, aim, length_cells)` → `(allies, enemies)` and
+  `aoe.best_line(bf, caster, length_cells, allow_allies=False, min_enemies=2)` → `(enemies, aim)`
+  (from `dnd5e.aoe`): the reusable line-AoE geometry. `dnd5e_behaviors/evoker_wizard.py` is the
+  worked example — a friendly-fire-aware, slot-limited bolt AI in ~30 lines.
 
 ### Per-creature state
 

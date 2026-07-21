@@ -555,3 +555,119 @@ def test_single_target_weapon_hits_one_enemy_not_the_whole_pack(tmp_path):
     targets = select_targets(fighter, abilities["sword"], make_ctx(bf))
     assert len(targets) == 1                              # NOT all three
     assert targets[0].instance_name == "wolf_a"           # nearest
+
+
+# =============================================================================
+# Area of effect — Lightning Bolt's line (design doc 04, geometric shapes)
+# =============================================================================
+
+def _bolt():
+    return Ability(name="lightning_bolt", kind="save", ability="dexterity", dc=14,
+                   damage="8d6", damage_type="lightning", half_on_save=True,
+                   area={"shape": "line", "length_ft": 100})
+
+
+def make_walled_board(tmp_path, ascii_map):
+    p = tmp_path / "walled.toml"
+    p.write_text(f'name = "walled"\nmap = """\n{ascii_map}\n"""\n[meta]\ncell_feet = 5\n')
+    return load_board_toml(p)
+
+
+def test_line_aoe_catches_every_collinear_enemy(tmp_path):
+    """The whole point of the fix: a 100-ft line through a clustered row hits
+    ALL of them, not one (before, lightning_bolt with no `targets` hit exactly
+    one enemy)."""
+    board = make_board(tmp_path)
+    caster = make_creature("wizard", "party", 0, 0)
+    row = [make_creature(f"ww_{i}", "monsters", x, 0) for i, x in enumerate((2, 4, 6))]
+    bf = Battlefield([caster, *row], board=board)
+    targets = select_targets(caster, _bolt(), make_ctx(bf))
+    assert {t.instance_name for t in targets} == {"ww_0", "ww_1", "ww_2"}
+
+
+def test_line_aoe_aims_to_catch_the_most(tmp_path):
+    """The caster aims optimally: the east row of three beats the lone foe on a
+    different bearing."""
+    board = make_board(tmp_path)
+    caster = make_creature("wizard", "party", 0, 2)
+    row = [make_creature(f"row_{i}", "monsters", x, 2) for i, x in enumerate((3, 5, 7))]
+    lone = make_creature("lone", "monsters", 1, 4)       # a different direction
+    bf = Battlefield([caster, *row, lone], board=board)
+    targets = select_targets(caster, _bolt(), make_ctx(bf))
+    assert {t.instance_name for t in targets} == {"row_0", "row_1", "row_2"}
+
+
+def test_line_aoe_spread_enemies_catch_only_one(tmp_path):
+    """No single ray catches foes on different bearings — a spread-out pack
+    defangs the bolt (the balance point of modeling geometry at all)."""
+    board = make_board(tmp_path)
+    caster = make_creature("wizard", "party", 0, 0)
+    east = make_creature("east", "monsters", 2, 0)       # bearing 0
+    diag = make_creature("diag", "monsters", 2, 4)       # a steeper bearing
+    bf = Battlefield([caster, east, diag], board=board)
+    targets = select_targets(caster, _bolt(), make_ctx(bf))
+    assert len(targets) == 1
+
+
+def test_line_aoe_stops_at_a_wall(tmp_path):
+    """A wall is total cover: the bolt can't punch through to the foe behind
+    it."""
+    board = make_walled_board(tmp_path, ".#..\n....")   # wall at (1,0)
+    caster = make_creature("wizard", "party", 0, 0)
+    behind = make_creature("behind", "monsters", 3, 0)   # past the wall
+    off = make_creature("off", "monsters", 1, 1)         # reachable, other row
+    bf = Battlefield([caster, behind, off], board=board)
+    targets = select_targets(caster, _bolt(), make_ctx(bf))
+    assert "behind" not in {t.instance_name for t in targets}
+
+
+def test_aoe_targets_gates_a_multiattack_on_cluster_size(tmp_path):
+    """The `aoe_targets(name)` expression lets a `when` ask 'is the line worth a
+    slot?'. Two collinear foes -> the bolt option is eligible; move one off the
+    line -> it isn't, and the wizard falls back to the cantrip."""
+    board = make_board(tmp_path)
+    abilities = {"lightning_bolt": _bolt(),
+                 "fire_bolt": Ability(name="fire_bolt", kind="attack", to_hit=7, damage="2d10",
+                                      damage_type="fire", requires_sight=False)}
+    multiattack = {
+        "blast": MultiattackOption(name="blast", actions=("lightning_bolt",),
+                                   when=expr("aoe_targets('lightning_bolt') >= 2"), priority=10),
+        "standard": MultiattackOption(name="standard", actions=("fire_bolt",), priority=0),
+    }
+    sb = Statblock(name="wiz", display_name="wiz", classification={}, stats=make_stats(),
+                   abilities=abilities, multiattack=multiattack)
+    wiz = make_creature("wiz", "party", 0, 0, statblock=sb)
+    a = make_creature("a", "monsters", 2, 0)
+    b = make_creature("b", "monsters", 4, 0)             # collinear -> line hits 2
+    bf = Battlefield([wiz, a, b], board=board)
+    assert select_multiattack(wiz, make_ctx(bf)).name == "blast"
+
+    b.place(4, 3)                                        # now off the line -> only 1 caught
+    assert select_multiattack(wiz, make_ctx(bf)).name == "standard"
+
+
+def test_costed_ability_exhausts_after_its_slots(tmp_path):
+    """The usage ceiling: spending a costed ability decrements its resource, and
+    once it's gone the multiattack option is no longer eligible (falls back)."""
+    from dnd5e.behavior import _costs_available
+    from dnd5e.statblock import Resource
+    from dnd5e.system import _spend_costs
+
+    bolt = Ability(name="lightning_bolt", kind="save", ability="dexterity", dc=14, damage="8d6",
+                   damage_type="lightning", half_on_save=True, area={"shape": "line", "length_ft": 100},
+                   costs={"resource": "leveled_slots", "amount": 1})
+    fire = Ability(name="fire_bolt", kind="attack", to_hit=7, damage="2d10", damage_type="fire")
+    blast = MultiattackOption(name="blast", actions=("lightning_bolt",), priority=10)
+    sb = Statblock(name="wiz", display_name="wiz", classification={}, stats=make_stats(),
+                   abilities={"lightning_bolt": bolt, "fire_bolt": fire},
+                   multiattack={"blast": blast}, resources={"leveled_slots": Resource(name="leveled_slots", uses=2)})
+    wiz = make_creature("wiz", "party", 0, 0, statblock=sb)
+    wiz.reset_state()                                    # populates resources from the statblock
+
+    assert wiz.resources["leveled_slots"] == 2 and _costs_available(blast, wiz)
+    _spend_costs(wiz, bolt)
+    assert wiz.resources["leveled_slots"] == 1 and _costs_available(blast, wiz)
+    _spend_costs(wiz, bolt)
+    assert wiz.resources["leveled_slots"] == 0 and not _costs_available(blast, wiz)  # exhausted
+    _spend_costs(wiz, bolt)                              # never goes negative
+    assert wiz.resources["leveled_slots"] == 0

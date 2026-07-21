@@ -273,7 +273,7 @@ FUNCTION_NAMES = frozenset({
     "is_grappling", "is_grappled_by", "is_grappled",
     "resource_available", "round", "has_flag", "any_yet_to_act", "side_of",
     "enemies_within", "allies_within", "enemies_tagged", "allies_tagged",
-    "enemies_within_of", "allies_within_of", "turn_marked",
+    "enemies_within_of", "allies_within_of", "turn_marked", "aoe_targets",
 })
 
 
@@ -361,6 +361,7 @@ class Scope(Protocol):
     def is_grappled_by(self, a: Any, b: Any) -> bool: ...
     def is_grappled(self, who: Any) -> bool: ...
     def resource_available(self, name: str) -> bool: ...
+    def aoe_targets(self, ability_name: str) -> int: ...
     def round_number(self) -> int: ...
     def has_flag(self, name: str) -> bool: ...
     def turn_marked(self, key: str) -> bool: ...
@@ -502,6 +503,7 @@ _CALL_TABLE: dict[str, Callable[..., Any]] = {
     "is_grappled_by": lambda scope, a, b: scope.is_grappled_by(a, b),
     "is_grappled": lambda scope, who: scope.is_grappled(who),
     "resource_available": lambda scope, name: scope.resource_available(name),
+    "aoe_targets": lambda scope, name: scope.aoe_targets(name),
     "round": lambda scope: scope.round_number(),
     "has_flag": lambda scope, name: scope.has_flag(name),
     "turn_marked": lambda scope, key: scope.turn_marked(key),

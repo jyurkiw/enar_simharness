@@ -75,6 +75,10 @@ class Ability:
     # targeting
     targets: Optional[str] = None
     target_filter: Optional["Node"] = None
+    # Area of effect (Lightning Bolt's line, etc.): a `{shape, ...}` dict. When
+    # present, targeting is geometric — the caster aims to catch the most
+    # enemies, and every enemy in the area is a target (each rolls the save).
+    area: Optional[dict] = None
     # Whether the default (no explicit `targets`) enemy pool is filtered to
     # what the actor can SEE. Spells that require sight keep the default True;
     # mundane weapons set it False (you can swing at an unseen foe). This is the

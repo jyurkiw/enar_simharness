@@ -66,6 +66,19 @@ from .flags import FlagBag
 from .statblock import Statblock
 
 
+def _spend_costs(actor: Creature, ability) -> None:
+    """Deduct an ability's `costs` resource once it has actually fired (a
+    limited spell slot, a ki point). `behavior._costs_available` already gated
+    the multiattack option on the resource being present, so this is the
+    matching debit — the usage ceiling. No-op for the common costless ability."""
+    costs = ability.costs
+    if not costs:
+        return
+    name = costs.get("resource")
+    if name and name in actor.resources:
+        actor.resources[name] = max(0, actor.resources[name] - costs.get("amount", 1))
+
+
 @dataclass(frozen=True)
 class RosterSlot:
     """One creature to place on the board, with its spawn point already
@@ -137,6 +150,14 @@ class Dnd5eSystem:
 
         for creature in creatures:
             creature.roll_hp(resolver, mode=self.hp_mode)
+            # Seed per-trial resource pools (ki, spell slots, ...) from the
+            # statblock. setup_trial builds fresh Creatures each trial and does
+            # NOT call reset_state, so without this every `resource_available`
+            # / costed-ability check saw an empty pool (a latent bug: a monk's
+            # ki gate was silently always false). This is the matching seed for
+            # `_spend_costs`'s debit.
+            for name, resource in creature.statblock.resources.items():
+                creature.resources[name] = resource.uses
 
         # Passive traits (design doc 03's `emit_light`/`limited_darkvision`/
         # `darkvision_immunity` — all marked "(trait)") apply once here, at
@@ -230,6 +251,7 @@ class Dnd5eSystem:
                                       max_range_ft=ability.range_normal)
             self._offer_opportunity_attacks(actor, before, actor.coord, game, ctx)
             resolve_ability(game.combat_ctx, actor, ability, targets)
+            _spend_costs(actor, ability)
 
     def is_over(self, ctx: TrialContext) -> bool:
         game: GameState = ctx.game

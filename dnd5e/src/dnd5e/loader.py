@@ -165,6 +165,20 @@ def _validate_effect_args(call: EffectCall, *, where: str, known_conditions: fro
         require_keys(call.args, ["ability"], where=where)
 
 
+# Area-of-effect shapes the engine can target geometrically (behavior.py). Only
+# the line (Lightning Bolt) is modeled so far; cone/sphere would join here.
+AREA_SHAPES = frozenset({"line"})
+
+
+def _validate_area(area: dict, *, where: str) -> None:
+    if not isinstance(area, dict):
+        raise ValueError(f"{where}: expected an inline table, got {type(area).__name__}")
+    shape = area.get("shape")
+    closed_vocab(shape, AREA_SHAPES, where=f"{where}.shape")
+    if shape == "line":
+        require_keys(area, ["length_ft"], where=where)
+
+
 def _build_ability(name: str, spec: dict, *, where: str, known_conditions: frozenset) -> Ability:
     kind = spec.get("kind")
     closed_vocab(kind, ABILITY_KINDS, where=f"{where}.kind")
@@ -176,6 +190,9 @@ def _build_ability(name: str, spec: dict, *, where: str, known_conditions: froze
     advantage_when = None
     if "advantage_when" in spec:
         advantage_when = expressions.parse_and_validate(spec["advantage_when"], where=f"{where}.advantage_when")
+    area = spec.get("area")
+    if area is not None:
+        _validate_area(area, where=f"{where}.area")
     return Ability(
         name=name, kind=kind,
         to_hit=spec.get("to_hit"), damage=spec.get("damage"), damage_type=spec.get("damage_type"),
@@ -184,6 +201,7 @@ def _build_ability(name: str, spec: dict, *, where: str, known_conditions: froze
         advantage_when=advantage_when,
         ability=spec.get("ability"), dc=spec.get("dc"), half_on_save=spec.get("half_on_save", False),
         targets=spec.get("targets"), target_filter=target_filter, max_targets=spec.get("max_targets"),
+        area=area,
         requires_sight=spec.get("requires_sight", True),
         amount=spec.get("amount"), range=spec.get("range"),
         costs=spec.get("costs"), uses_bonus_action=spec.get("uses_bonus_action", False),

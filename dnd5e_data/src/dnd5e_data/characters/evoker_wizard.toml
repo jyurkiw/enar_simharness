@@ -36,6 +36,12 @@ average = 32
 [stats.saves]
 constitution = 2
 
+# A 5th-level wizard's two 3rd-level spell slots = two castings of Lightning
+# Bolt. `costs` (below) spends one per cast, and the `blast` multiattack option
+# becomes ineligible once they're gone — the usage ceiling.
+[resources.leveled_slots]
+uses = 2
+
 [abilities.fire_bolt]
 kind = "attack"
 to_hit = 7
@@ -50,10 +56,20 @@ dc = 14
 damage = "8d6"
 damage_type = "lightning"
 half_on_save = true
+# A 100-ft, 5-ft-wide LINE from the caster (not single-target). The engine aims
+# it to catch the most enemies; every creature in the line rolls the DC 14 Dex
+# save (8d6, half on a save). Against a clustered pack this can hit several — the
+# whole point of bringing an evoker to a swarm fight.
+area = { shape = "line", length_ft = 100 }
+costs = { resource = "leveled_slots", amount = 1 }
 
-[multiattack.opener]
+# The Lightning Bolt decision is a stochastic, friendly-fire-aware AI block, so
+# it lives in the Python escape hatch (EvokerBrain) below — the hatch forces
+# "blast" or "standard" each turn. The `when` here is a defensive floor only (a
+# clean 2+ line): it matters solely if the hatch ever falls through.
+[multiattack.blast]
 actions = ["lightning_bolt"]
-when = "round() == 1 and can_see(self, nearest_enemy)"
+when = "aoe_targets('lightning_bolt') >= 2"
 priority = 10
 
 [multiattack.standard]
@@ -62,3 +78,8 @@ priority = 0
 
 [behavior]
 tactic = "kite"
+
+# The bolt-slot AI: per-round chance to spend a slot, aim to hit 2+ enemies with
+# no PC in the line, hold or nuke-solo otherwise (see the module for the knobs).
+[behavior.custom]
+handler = "python:dnd5e_behaviors.evoker_wizard.EvokerBrain"
