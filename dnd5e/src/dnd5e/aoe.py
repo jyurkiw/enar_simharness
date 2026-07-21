@@ -53,6 +53,14 @@ def line_cells(board, origin: tuple, aim: tuple, length_cells: int) -> list:
     return cells
 
 
+def _reserved_from(caster, c) -> bool:
+    """True when `c` reserves itself for other agents (`engaged_by`) and this
+    caster isn't one of them — so an AoE caster ignores it (the seal doesn't
+    pull the wizard's Fireball aim)."""
+    reserved = c.statblock.engaged_by
+    return bool(reserved) and not any(caster.has_tag(t) for t in reserved)
+
+
 def get_targets(bf, caster, aim: tuple, length_cells: int) -> tuple[list, list]:
     """The base primitive: creatures a line from `caster` toward `aim` would
     catch, as `(allies, enemies)` (excluding the caster and the Down). Count the
@@ -60,7 +68,7 @@ def get_targets(bf, caster, aim: tuple, length_cells: int) -> tuple[list, list]:
     cells = set(line_cells(bf.board, caster.coord, aim, length_cells))
     allies, enemies = [], []
     for c in bf.creatures.values():
-        if c is caster or c.is_down or c.coord not in cells:
+        if c is caster or c.is_down or c.coord not in cells or _reserved_from(caster, c):
             continue
         (allies if c.side == caster.side else enemies).append(c)
     return allies, enemies
@@ -76,7 +84,7 @@ def best_line(bf, caster, length_cells: int, *, max_allies: int = 0,
         return None
     best: Optional[tuple[list, tuple]] = None
     for foe in bf.enemies_of(caster):
-        if foe.coord is None:
+        if foe.coord is None or _reserved_from(caster, foe):
             continue
         allies, enemies = get_targets(bf, caster, foe.coord, length_cells)
         if len(allies) > max_allies:
@@ -134,7 +142,7 @@ def split_cells(bf, caster, cells: set) -> tuple[list, list]:
     (excluding the caster). The area version of get_targets."""
     allies, enemies = [], []
     for c in bf.creatures.values():
-        if c is caster or c.is_down or c.coord not in cells:
+        if c is caster or c.is_down or c.coord not in cells or _reserved_from(caster, c):
             continue
         (allies if c.side == caster.side else enemies).append(c)
     return allies, enemies
@@ -149,7 +157,7 @@ def best_sphere(bf, caster, radius_ft: int, range_ft: int, *, max_allies: int = 
         return None
     best: Optional[tuple[list, tuple]] = None
     for foe in bf.enemies_of(caster):
-        if foe.coord is None or bf.board.distance_ft(caster.coord, foe.coord) > range_ft:
+        if foe.coord is None or _reserved_from(caster, foe) or bf.board.distance_ft(caster.coord, foe.coord) > range_ft:
             continue
         allies, enemies = split_cells(bf, caster, sphere_cells(bf.board, foe.coord, radius_ft))
         if len(allies) > max_allies:

@@ -113,7 +113,8 @@ class Creature:
         return self.statblock.stats.save_mod(ability)
 
     def has_tag(self, tag: str) -> bool:
-        return tag in self.tags
+        # Union of intrinsic (statblock) and per-combatant tags.
+        return tag in self.tags or tag in self.statblock.tags
 
     # ---- conditions -----------------------------------------------------------
 

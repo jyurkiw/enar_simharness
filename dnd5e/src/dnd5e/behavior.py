@@ -308,6 +308,11 @@ def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> l
     pool = _resolve_targets_selector(ability.targets, scope, ctx, requires_sight=ability.requires_sight)
     is_set_selector = ability.targets in SET_SELECTORS
 
+    # Agent-scoped reservation (design: the confessio seal is `engaged_by =
+    # ["breaker"]`): a reserved target is targetable only by agents with a
+    # matching tag, so ranged PCs drop it from their pool entirely.
+    pool = [c for c in pool if _may_engage(actor, c)]
+
     if ability.target_filter is not None:
         pool = [c for c in pool
                 if expressions.evaluate(ability.target_filter, ConcreteScope(ctx, actor, target=c))]
@@ -333,6 +338,12 @@ def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> l
                 order = rule.order
                 break
         ordered = _order_pool(pool, order, actor, ctx)
+
+    # A reserved target this agent DOES engage (it's a breaker) is the priority:
+    # pull it to the front so the melee beelines the seal past lesser foes.
+    reserved = [c for c in ordered if _engages(actor, c)]
+    if reserved:
+        ordered = reserved + [c for c in ordered if c not in reserved]
 
     custom = actor.statblock.behavior.custom
     if custom is not None and ordered:
@@ -361,6 +372,19 @@ def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> l
 # tabletop (a foe one cell off the ray isn't caught) but captures the thing that
 # matters: a clustered pack lets one bolt hit several bodies without frying the
 # party, a mixed scrum doesn't.
+
+
+def _engages(actor: Creature, target: Creature) -> bool:
+    """True when `target` reserves itself for `actor` (design: the seal is
+    `engaged_by = ["breaker"]` and the actor is tagged breaker)."""
+    reserved = target.statblock.engaged_by
+    return bool(reserved) and any(actor.has_tag(t) for t in reserved)
+
+
+def _may_engage(actor: Creature, target: Creature) -> bool:
+    """A reserved target (`engaged_by` non-empty) is targetable only by matching
+    agents; an unreserved target is fair game for everyone."""
+    return not target.statblock.engaged_by or _engages(actor, target)
 
 
 def _area_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> list:

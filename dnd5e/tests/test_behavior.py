@@ -671,3 +671,26 @@ def test_costed_ability_exhausts_after_its_slots(tmp_path):
     assert wiz.resources["leveled_slots"] == 0 and not _costs_available(blast, wiz)  # exhausted
     _spend_costs(wiz, bolt)                              # never goes negative
     assert wiz.resources["leveled_slots"] == 0
+
+
+def test_engaged_by_reserves_the_objective_for_breakers(tmp_path):
+    """A target with `engaged_by=['breaker']` is targeted ONLY by breaker-tagged
+    agents (who prioritize it); everyone else ignores it entirely."""
+    board = make_board(tmp_path)
+    seal_sb = Statblock(name="seal", display_name="seal", classification={},
+                        stats=make_stats(), engaged_by=("breaker",))
+    weapon = Ability(name="hit", kind="attack", to_hit=5, damage="1d6", requires_sight=False)
+    pc_sb = lambda: Statblock(name="pc", display_name="pc", classification={}, stats=make_stats(),
+                              abilities={"hit": weapon},
+                              multiattack={"m": MultiattackOption(name="m", actions=("hit",))})
+    seal = make_creature("seal", "monsters", 5, 0, statblock=seal_sb)
+    goblin = make_creature("goblin", "monsters", 1, 0, statblock=pc_sb())
+    breaker = make_creature("breaker", "party", 0, 0, statblock=pc_sb()); breaker.tags = ("breaker",)
+    ranged = make_creature("ranged", "party", 0, 1, statblock=pc_sb())
+    bf = Battlefield([seal, goblin, breaker, ranged], board=board)
+    # Breaker: seal is top priority even though the goblin is nearer.
+    bt = select_targets(breaker, weapon, make_ctx(bf))
+    assert bt and bt[0].instance_name == "seal"
+    # Ranged: seal is invisible to targeting; it hits the goblin instead.
+    rt = select_targets(ranged, weapon, make_ctx(bf))
+    assert rt and all(t.instance_name != "seal" for t in rt)

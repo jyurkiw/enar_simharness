@@ -220,6 +220,16 @@ class Statblock:
     display_name: str
     classification: dict
     stats: Stats
+    # Intrinsic tags (from the creature file's top-level `tags`). Merged with the
+    # per-combatant tags at has_tag time — a capability like "sculpt_spells" or a
+    # role like "breaker" belongs on the statblock; scenario-only tags go on the
+    # combatant entry.
+    tags: tuple[str, ...] = ()
+    # Agent-scoped target reservation: if non-empty, ONLY agents carrying one of
+    # these tags may target this creature, and those agents *prioritize* it.
+    # Everyone else ignores it. (The confessio seal is `engaged_by = ["breaker"]`
+    # so the melee run it down and ranged PCs leave it alone.)
+    engaged_by: tuple[str, ...] = ()
     abilities: dict = field(default_factory=dict)       # name -> Ability
     multiattack: dict = field(default_factory=dict)     # name -> MultiattackOption
     traits: dict = field(default_factory=dict)          # name -> Trait

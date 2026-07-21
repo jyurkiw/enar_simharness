@@ -399,6 +399,8 @@ def build_statblock(cfg: dict, *, source: str) -> Statblock:
         display_name=cfg.get("display_name", name.replace("_", " ").title()),
         classification=dict(cfg.get("classification", {})),
         stats=stats,
+        tags=tuple(cfg.get("tags", ())),
+        engaged_by=tuple(cfg.get("engaged_by", ())),
         abilities=abilities,
         multiattack=multiattack,
         traits=traits,

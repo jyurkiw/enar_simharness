@@ -24,6 +24,7 @@ seed = 20260721
 creature = "champion_fighter_l6"
 side = "party"
 spawn = "party"
+tags = ["breaker"]          # melee: runs the seal down
 [[combatants]]
 creature = "hunter_ranger_l6"
 side = "party"
@@ -32,6 +33,7 @@ spawn = "party"
 creature = "thief_rogue_l6"
 side = "party"
 spawn = "party"
+tags = ["breaker"]          # melee: runs the seal down
 [[combatants]]
 creature = "life_cleric_l6"
 side = "party"
@@ -81,21 +83,17 @@ combatants = [
   { creature = "priest", count = 1 },
 ]
 
-# The bruiser charges the seal and breaks it (applies only when that PC is in
-# the party, so it selects the fighter in the standard party and the barbarian
-# in the alternate).
-[overrides.champion_fighter_l6.behavior.custom]
-handler = "python:dnd5e_behaviors.cathedral.SealBreaker"
-[overrides.berserker_barbarian_l6.behavior.custom]
-handler = "python:dnd5e_behaviors.cathedral.SealBreaker"
-
+# The melee run the seal down: they carry the "breaker" tag, and the seal is
+# `engaged_by = ["breaker"]`, so only they target it (and prioritize it) while
+# the ranged PCs ignore it and cover the approach. Standard melee = fighter +
+# rogue; alternate melee = barbarian + monk.
 [[sweep.axes]]
 target = "combatants"
 values = [
   [
-    { creature = "champion_fighter_l6", side = "party", spawn = "party" },
+    { creature = "champion_fighter_l6", side = "party", spawn = "party", tags = ["breaker"] },
     { creature = "hunter_ranger_l6", side = "party", spawn = "party" },
-    { creature = "thief_rogue_l6", side = "party", spawn = "party" },
+    { creature = "thief_rogue_l6", side = "party", spawn = "party", tags = ["breaker"] },
     { creature = "life_cleric_l6", side = "party", spawn = "party" },
     { creature = "evoker_wizard_l6", side = "party", spawn = "party" },
     { creature = "confessio_seal", side = "monsters", spawn = "seal" },
@@ -106,9 +104,9 @@ values = [
     { creature = "cultist", side = "monsters", spawn = "monsters", count = 8 },
   ],
   [
-    { creature = "berserker_barbarian_l6", side = "party", spawn = "party" },
+    { creature = "berserker_barbarian_l6", side = "party", spawn = "party", tags = ["breaker"] },
     { creature = "devotion_paladin_l6", side = "party", spawn = "party" },
-    { creature = "martial_arts_monk_l6", side = "party", spawn = "party" },
+    { creature = "martial_arts_monk_l6", side = "party", spawn = "party", tags = ["breaker"] },
     { creature = "life_cleric_l6", side = "party", spawn = "party" },
     { creature = "evoker_wizard_l6", side = "party", spawn = "party" },
     { creature = "confessio_seal", side = "monsters", spawn = "seal" },

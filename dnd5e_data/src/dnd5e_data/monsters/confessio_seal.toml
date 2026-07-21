@@ -7,6 +7,10 @@
 name = "confessio_seal"
 display_name = "Sealed Confessio"
 tags = ["objective"]
+# Only agents tagged "breaker" (the melee) target the seal, and they prioritize
+# it — you smash concrete in melee, not with arrows. Ranged PCs ignore it and
+# cover the approach instead.
+engaged_by = ["breaker"]
 
 [classification]
 size = "Medium"
