@@ -1,0 +1,62 @@
+# Board representation for the TC_Farmhouse_ruins map
+
+name = "farmhouse_ruin"
+
+map = """
+fffffffff......fffffffffffffffff
+f.........................#####f
+f..........................ddd#f
+f.........................#ddd#f
+f.........................#ddd#f
+f.........................#####f
+f.........................#d#.#f
+f.........................#.#.#f
+f......ddddd..................Pf
+f......ddddd#.................PP
+f.....#ddddd..................PP
+f....###...#####.###W#.#W###..Pf
+f....#........................ff
+f....d..iiid...###.###...MM#...f
+f....#..iiid.#.#d..#dMMM...d...f
+f............#.#dM.#MMMddddd...f
+f....###W#########W####dddd#...f
+f............................##f
+f............................##f
+ffffffffffffffffffffffffffffffff
+"""
+
+[meta]
+cell_feet = 5
+diagonal = "chebyshev"
+
+[glyph.'#']
+terrain = "impassable"
+cover = "full"
+blocks_los = true
+blocks_light = true
+
+# Fence
+[glyph.'f']
+terrain = "difficult"
+cover = "half"
+
+# Pit
+[glyph.'i']
+terrain = "difficult"
+
+# Debris
+[glyph.'d']
+terrain = "difficult"
+
+# Window
+[glyph.'W']
+terrain = "difficult"
+cover = "three_quarters"
+
+[glyph.'P']
+terrain = "open"
+spawn = "party"
+
+[glyph.'M']
+terrain = "open"
+spawn = "monsters"
