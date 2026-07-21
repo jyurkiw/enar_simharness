@@ -1,0 +1,78 @@
+# Cathedral central chamber. ~25 wide x 40 long. A central aisle (cols 10-14)
+# runs from the south doors up to the chancel; pews flank it (difficult terrain +
+# half cover). The party enters at the south doors (bottom center); the Cathedral
+# horde is massed at the back (north). The sealed confessio (the objective) sits
+# by the lectern at the front-left, glyph `S`.
+name = "cathedral"
+
+map = """
+#########################
+#.......................#
+#..M.M.M.M.M.M.M.M.M.M..#
+#..M.M.M.M.M.M.M.M.M.M..#
+#..M.M.M.M.M.M.M.M.M.M..#
+#.......................#
+#.......................#
+#.......................#
+#.......................#
+#.......................#
+#.......S...............#
+#.......................#
+#.......................#
+#.......................#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.......................#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.......................#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.pppppppp.....pppppppp.#
+#.......................#
+#..........PPPP.........#
+#..........PPPP.........#
+###########....##########
+"""
+
+[meta]
+cell_feet = 5
+diagonal = "chebyshev"
+
+[glyph.'#']
+terrain = "impassable"
+cover = "full"
+blocks_los = true
+blocks_light = true
+
+# Pew: passable but difficult, and gives half cover to whoever fights from it.
+[glyph.'p']
+terrain = "difficult"
+cover = "half"
+
+[glyph.'P']
+terrain = "open"
+spawn = "party"
+
+[glyph.'M']
+terrain = "open"
+spawn = "monsters"
+
+# The sealed confessio under the lectern — where the destructible seal object
+# and the box spawn.
+[glyph.'S']
+terrain = "open"
+spawn = "seal"
