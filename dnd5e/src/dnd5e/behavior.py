@@ -363,15 +363,8 @@ def select_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> l
 # party, a mixed scrum doesn't.
 
 
-def _area_length_cells(board, ability: Ability) -> int:
-    return board.feet_to_cells(ability.area["length_ft"])
-
-
 def _area_targets(actor: Creature, ability: Ability, ctx: BehaviorContext) -> list:
-    if ability.area.get("shape") != "line":
-        raise ValueError(f"unknown area shape {ability.area.get('shape')!r}")  # loader validates
-    length_cells = _area_length_cells(ctx.battlefield.board, ability)
-    choice = aoe.best_line(ctx.battlefield, actor, length_cells, allow_allies=False, min_enemies=1)
+    choice = aoe.best_area(ctx.battlefield, actor, ability.area, allow_allies=False, min_enemies=1)
     return choice[0] if choice is not None else []
 
 

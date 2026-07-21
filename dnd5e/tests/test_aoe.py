@@ -137,6 +137,49 @@ def test_brain_out_of_slots_uses_cantrip(tmp_path):
     assert EvokerBrain().choose_multiattack(wiz, ConcreteScope(_view(bf, 1), wiz)) == "standard"
 
 
+def test_sphere_catches_a_cluster(tmp_path):
+    b = board(tmp_path)
+    wiz = creature("wiz", "party", 0, 0)
+    foes = [creature(f"f{i}", "monsters", x, y) for i, (x, y) in enumerate([(5, 4), (5, 5), (6, 5)])]
+    bf = Battlefield([wiz, *foes], board=b)
+    choice = aoe.best_area(bf, wiz, {"shape": "sphere", "radius_ft": 20, "range_ft": 150})
+    assert choice is not None and len(choice[0]) == 3
+
+
+def test_sphere_respects_friendly_fire_and_sculpt(tmp_path):
+    b = board(tmp_path)
+    wiz = creature("wiz", "party", 0, 0)
+    ally = creature("ally", "party", 5, 4)          # standing in the only cluster
+    foes = [creature(f"f{i}", "monsters", x, y) for i, (x, y) in enumerate([(5, 5), (6, 5)])]
+    bf = Battlefield([wiz, ally, *foes], board=b)
+    # No clean 2-enemy sphere (the ally is amid them):
+    assert aoe.best_area(bf, wiz, {"shape": "sphere", "radius_ft": 20, "range_ft": 150},
+                         min_enemies=2) is None
+    # Sculpt (allow_allies) re-opens it:
+    choice = aoe.best_area(bf, wiz, {"shape": "sphere", "radius_ft": 20, "range_ft": 150},
+                           allow_allies=True, min_enemies=2)
+    assert choice is not None and len(choice[0]) == 2
+
+
+def test_sphere_out_of_range_is_none(tmp_path):
+    b = board(tmp_path)
+    wiz = creature("wiz", "party", 0, 0)
+    foe = creature("f", "monsters", 10, 6)
+    bf = Battlefield([wiz, foe], board=b)
+    # foe is ~50 ft away; a 15-ft-range sphere can't reach it.
+    assert aoe.best_area(bf, wiz, {"shape": "sphere", "radius_ft": 20, "range_ft": 15}) is None
+
+
+def test_cube_hits_enemies_in_front(tmp_path):
+    b = board(tmp_path)
+    wiz = creature("wiz", "party", 0, 4)
+    front = [creature(f"f{i}", "monsters", 1, y) for i, y in enumerate((3, 4, 5))]  # column just east
+    behind = creature("back", "monsters", 0, 0)                                     # not in the east cube
+    bf = Battlefield([wiz, *front, behind], board=b)
+    choice = aoe.best_area(bf, wiz, {"shape": "cube", "size_ft": 15})
+    assert choice is not None and {e.instance_name for e in choice[0]} == {"f0", "f1", "f2"}
+
+
 def test_brain_will_not_fry_a_teammate(tmp_path):
     b = board(tmp_path)
     wiz = creature("wiz", "party", 0, 0, sb=wizard_sb()); wiz.reset_state()

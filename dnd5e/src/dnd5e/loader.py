@@ -165,9 +165,11 @@ def _validate_effect_args(call: EffectCall, *, where: str, known_conditions: fro
         require_keys(call.args, ["ability"], where=where)
 
 
-# Area-of-effect shapes the engine can target geometrically (behavior.py). Only
-# the line (Lightning Bolt) is modeled so far; cone/sphere would join here.
-AREA_SHAPES = frozenset({"line"})
+# Area-of-effect shapes the engine can target geometrically (aoe.py): a line
+# (Lightning Bolt), a sphere (Fireball, Shatter), and a caster-origin cube
+# (Thunder Wave). A cone would join here.
+AREA_SHAPES = frozenset({"line", "sphere", "cube"})
+_AREA_REQUIRED = {"line": ["length_ft"], "sphere": ["radius_ft", "range_ft"], "cube": ["size_ft"]}
 
 
 def _validate_area(area: dict, *, where: str) -> None:
@@ -175,8 +177,7 @@ def _validate_area(area: dict, *, where: str) -> None:
         raise ValueError(f"{where}: expected an inline table, got {type(area).__name__}")
     shape = area.get("shape")
     closed_vocab(shape, AREA_SHAPES, where=f"{where}.shape")
-    if shape == "line":
-        require_keys(area, ["length_ft"], where=where)
+    require_keys(area, _AREA_REQUIRED[shape], where=where)
 
 
 def _build_ability(name: str, spec: dict, *, where: str, known_conditions: frozenset) -> Ability:

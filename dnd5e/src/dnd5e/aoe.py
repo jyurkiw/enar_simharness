@@ -22,9 +22,14 @@ lines become acceptable again.
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from dnd_board import bresenham
+
+# Cube directions (thunder wave "originates from you"): the four orthogonal
+# faces. dx, dy in board coords.
+_CUBE_DIRS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
 
 
 def line_cells(board, origin: tuple, aim: tuple, length_cells: int) -> list:
@@ -79,3 +84,111 @@ def best_line(bf, caster, length_cells: int, *, allow_allies: bool = False,
         if best is None or len(enemies) > len(best[0]):
             best = (enemies, foe.coord)
     return best
+
+
+# -----------------------------------------------------------------------------
+# Sphere (fireball, shatter) and cube (thunder wave)
+# -----------------------------------------------------------------------------
+
+
+def sphere_cells(board, center: tuple, radius_ft: int) -> set:
+    """Cells whose center is within `radius_ft` (Euclidean, so the blast reads
+    as a disc rather than a chebyshev square) of `center`, in bounds and not a
+    wall. Walls only remove their own cell here — no corner-spread modeling."""
+    cx, cy = center
+    r = radius_ft / board.cell_feet
+    rc = int(math.floor(r))
+    out = set()
+    for dy in range(-rc, rc + 1):
+        for dx in range(-rc, rc + 1):
+            if dx * dx + dy * dy > r * r:
+                continue
+            x, y = cx + dx, cy + dy
+            if board.is_passable(x, y):
+                out.add((x, y))
+    return out
+
+
+def cube_cells(board, origin: tuple, direction: tuple, size_cells: int) -> set:
+    """A `size_cells` cube with its near face against `origin`, extending in
+    `direction` (one of the four orthogonal faces). Passable cells only."""
+    ox, oy = origin
+    dx, dy = direction
+    half = (size_cells - 1) // 2
+    out = set()
+    for step in range(1, size_cells + 1):          # depth away from the caster
+        for lat in range(-half, half + 1):          # width across the face
+            if dx:                                   # facing east/west
+                x, y = ox + dx * step, oy + lat
+            else:                                    # facing north/south
+                x, y = ox + lat, oy + dy * step
+            if board.is_passable(x, y):
+                out.add((x, y))
+    return out
+
+
+def split_cells(bf, caster, cells: set) -> tuple[list, list]:
+    """`(allies, enemies)` among the live creatures standing in `cells`
+    (excluding the caster). The area version of get_targets."""
+    allies, enemies = [], []
+    for c in bf.creatures.values():
+        if c is caster or c.is_down or c.coord not in cells:
+            continue
+        (allies if c.side == caster.side else enemies).append(c)
+    return allies, enemies
+
+
+def best_sphere(bf, caster, radius_ft: int, range_ft: int, *, allow_allies: bool = False,
+                min_enemies: int = 1) -> Optional[tuple[list, tuple]]:
+    """Best sphere placement: `(enemies, center)`. Candidate centers are the live
+    enemy cells within `range_ft` of the caster — centering on a foe inside a
+    cluster catches the cluster, so no brute-force scan of the whole board."""
+    if caster.coord is None:
+        return None
+    best: Optional[tuple[list, tuple]] = None
+    for foe in bf.enemies_of(caster):
+        if foe.coord is None or bf.board.distance_ft(caster.coord, foe.coord) > range_ft:
+            continue
+        allies, enemies = split_cells(bf, caster, sphere_cells(bf.board, foe.coord, radius_ft))
+        if allies and not allow_allies:
+            continue
+        if len(enemies) < min_enemies:
+            continue
+        if best is None or len(enemies) > len(best[0]):
+            best = (enemies, foe.coord)
+    return best
+
+
+def best_cube(bf, caster, size_cells: int, *, allow_allies: bool = False,
+              min_enemies: int = 1) -> Optional[tuple[list, tuple]]:
+    """Best of the four cube facings from the caster: `(enemies, direction)`."""
+    if caster.coord is None:
+        return None
+    best: Optional[tuple[list, tuple]] = None
+    for d in _CUBE_DIRS:
+        allies, enemies = split_cells(bf, caster, cube_cells(bf.board, caster.coord, d, size_cells))
+        if allies and not allow_allies:
+            continue
+        if len(enemies) < min_enemies:
+            continue
+        if best is None or len(enemies) > len(best[0]):
+            best = (enemies, d)
+    return best
+
+
+def best_area(bf, caster, area: dict, *, allow_allies: bool = False,
+              min_enemies: int = 1) -> Optional[tuple[list, tuple]]:
+    """Dispatch to the right shape. Returns `(enemies, aim)` or None. `aim` is a
+    cell for line/sphere and a direction for cube (opaque to the caller — only
+    the enemy list is used for damage)."""
+    shape = area.get("shape")
+    if shape == "line":
+        length_cells = bf.board.feet_to_cells(area["length_ft"])
+        return best_line(bf, caster, length_cells, allow_allies=allow_allies, min_enemies=min_enemies)
+    if shape == "sphere":
+        return best_sphere(bf, caster, area["radius_ft"], area["range_ft"],
+                           allow_allies=allow_allies, min_enemies=min_enemies)
+    if shape == "cube":
+        size_cells = bf.board.feet_to_cells(area["size_ft"])
+        return best_cube(bf, caster, size_cells, allow_allies=allow_allies, min_enemies=min_enemies)
+    raise ValueError(f"unknown area shape {shape!r}")

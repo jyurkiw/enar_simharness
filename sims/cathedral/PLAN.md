@@ -60,7 +60,7 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 - [x] **02** Level-6 PC copies of all 8 archetypes (`cathedral-02-pcs-l6`)
 - [x] **03** Cathedral board (25×40, aisle + pews + doors) (`cathedral-03-board`)
 - [x] **04** Minimal deathmatch sim runs to 10 rounds — MILESTONE (`cathedral-04-deathmatch`)
-- [ ] **05** Sphere + cube AoE geometry in `aoe.py` + loader shapes (`cathedral-05-aoe-shapes`)
+- [x] **05** Sphere + cube AoE geometry in `aoe.py` + loader shapes (`cathedral-05-aoe-shapes`)
 - [ ] **06** Wizard L6 spells (fireball/shatter/thunderwave) + 1/1/1 leveled budget (`cathedral-06-wizard-spells`)
 - [ ] **07** Sculpt Spells (allies auto-succeed up to 1+level) (`cathedral-07-sculpt`)
 - [ ] **08** Shield reaction spell (+5 AC, gated, 2 uses) (`cathedral-08-shield`)
