@@ -1,0 +1,73 @@
+# Cathedral — pure-combat validation (NO objective/reinforcements yet). Standard
+# level-6 party vs the full central-chamber horde on the cathedral board, run to
+# 10 rounds. This is the step-04 milestone: it exists to prove the statblocks,
+# the L6 PCs, and the board integrate and the fight resolves. The real extraction
+# scenario (seal, box, retreat, reinforcement waves) is built in later steps as
+# sims/cathedral/simulation.toml.
+name = "cathedral_deathmatch"
+description = "Level-6 standard party vs the Cathedral horde (deathmatch validation)"
+
+board = "lib:cathedral"
+
+[simulation]
+trials = 300
+max_rounds = 10
+seed = 20260721
+
+[[combatants]]
+creature = "champion_fighter_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "cathedral_guard"
+side = "monsters"
+spawn = "monsters"
+count = 2
+
+[[combatants]]
+creature = "cult_fanatic"
+side = "monsters"
+spawn = "monsters"
+count = 2
+
+[[combatants]]
+creature = "priest_acolyte"
+side = "monsters"
+spawn = "monsters"
+count = 2
+
+[[combatants]]
+creature = "cult_agitator"
+side = "monsters"
+spawn = "monsters"
+count = 6
+
+[[combatants]]
+creature = "cultist"
+side = "monsters"
+spawn = "monsters"
+count = 8
+
+[output]
+report = ["totals", "survival"]

@@ -59,7 +59,7 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
 - [x] **01** Enemy statblocks: cathedral_guard, priest_acolyte, cult_fanatic, cult_agitator, cultist, priest (`cathedral-01-enemies`)
 - [x] **02** Level-6 PC copies of all 8 archetypes (`cathedral-02-pcs-l6`)
 - [x] **03** Cathedral board (25×40, aisle + pews + doors) (`cathedral-03-board`)
-- [ ] **04** Minimal deathmatch sim runs to 10 rounds — MILESTONE (`cathedral-04-deathmatch`)
+- [x] **04** Minimal deathmatch sim runs to 10 rounds — MILESTONE (`cathedral-04-deathmatch`)
 - [ ] **05** Sphere + cube AoE geometry in `aoe.py` + loader shapes (`cathedral-05-aoe-shapes`)
 - [ ] **06** Wizard L6 spells (fireball/shatter/thunderwave) + 1/1/1 leveled budget (`cathedral-06-wizard-spells`)
 - [ ] **07** Sculpt Spells (allies auto-succeed up to 1+level) (`cathedral-07-sculpt`)
@@ -88,3 +88,9 @@ of 1st/2nd/3rd per fight; shield is a separate 2-use reaction).
   comment still reads "level 5" (cosmetic; line-1 AUTO-DERIVED note clarifies).
   Wizard L6 spells (fireball/shatter/thunderwave/shield) + Sculpt land in steps
   06–08 on `evoker_wizard_l6.toml`.
+- **04:** Deathmatch validation runs clean to 10 rounds; party TPK 98.7% as
+  expected (5v20, no AoE wizard yet, no extraction win). Note: on the 40-long
+  board both sides start ~34 cells apart, so a pure deathmatch burns early rounds
+  closing distance — a non-issue for the extraction (the seal is at the north
+  chancel *near* the horde, so PCs charge toward the objective, not away). Kept
+  `deathmatch.toml` as a standing pure-combat reference.
