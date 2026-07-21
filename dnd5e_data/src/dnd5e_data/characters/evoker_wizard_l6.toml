@@ -1,19 +1,13 @@
-# AUTO-DERIVED level-6 copy (see sims/cathedral). Base file kept unchanged.
-# Evoker Wizard, level 5. Ported from
-# dnd5e_combat/characters/evoker_wizard/defaults.toml.
+# AUTO-DERIVED level-6 Evoker (see sims/cathedral). Base level-5 file untouched.
 #
-# PHASE 4: round-1 Lightning Bolt opener (LOS-gated, matching
-# dnd5e_combat/characters/evoker_wizard/__init__.py's take_turn) now expressed
-# via `round() == 1 and can_see(self, nearest_enemy)`; Fire Bolt is the
-# always-eligible fallback for every other round.
-#
-# REMAINING DELIBERATE CUT: the old policy's grapple response (Thunderwave the
-# grappler to try to break free — full negate on a successful Dex save,
-# otherwise self-ungrapple + damage) needs an effect that acts on the *source*
-# of an ability rather than its target, which the current `on_fail`/`on_hit`
-# effect model doesn't support. Low-frequency in these sims (the Otyugh grapples
-# whichever melee combatant is nearest, rarely the kiting wizard) — left for
-# whenever that effect-scope gap is closed.
+# Level 6 adds the evoker's Sculpt Spells and a real leveled-spell kit. For this
+# big fight the wizard is budgeted THREE leveled spells: one each of 1st / 2nd /
+# 3rd level (slot_1/slot_2/slot_3, one use apiece; a spell's `costs` spends its
+# slot). Shield is a separate 2-use reaction (see cathedral step 08).
+#   3rd: Fireball (20-ft sphere) OR Lightning Bolt (100-ft line) — one, not both
+#   2nd: Shatter (10-ft sphere)
+#   1st: Thunder Wave (15-ft cube from the caster)
+# The EvokerBrainL6 hatch picks which to cast and where, Sculpt-aware.
 name = "evoker_wizard_l6"
 display_name = "Evoker Wizard (Lv6)"
 
@@ -37,11 +31,13 @@ average = 38
 [stats.saves]
 constitution = 2
 
-# A 5th-level wizard's two 3rd-level spell slots = two castings of Lightning
-# Bolt. `costs` (below) spends one per cast, and the `blast` multiattack option
-# becomes ineligible once they're gone — the usage ceiling.
-[resources.leveled_slots]
-uses = 2
+# One slot of each level = the three-leveled-spell-per-fight budget.
+[resources.slot_1]
+uses = 1
+[resources.slot_2]
+uses = 1
+[resources.slot_3]
+uses = 1
 
 [abilities.fire_bolt]
 kind = "attack"
@@ -50,29 +46,67 @@ damage = "2d10"
 damage_type = "fire"
 range_normal = 120
 
-[abilities.lightning_bolt]
+[abilities.fireball]                       # 3rd level — 20-ft sphere, DC 15 Dex
 kind = "save"
 ability = "dexterity"
-dc = 14
+dc = 15
+damage = "8d6"
+damage_type = "fire"
+half_on_save = true
+area = { shape = "sphere", radius_ft = 20, range_ft = 150 }
+costs = { resource = "slot_3", amount = 1 }
+
+[abilities.lightning_bolt]                 # 3rd level — 100-ft line, DC 15 Dex
+kind = "save"
+ability = "dexterity"
+dc = 15
 damage = "8d6"
 damage_type = "lightning"
 half_on_save = true
-# A 100-ft, 5-ft-wide LINE from the caster (not single-target). The engine aims
-# it to catch the most enemies; every creature in the line rolls the DC 14 Dex
-# save (8d6, half on a save). Against a clustered pack this can hit several — the
-# whole point of bringing an evoker to a swarm fight.
 area = { shape = "line", length_ft = 100 }
-costs = { resource = "leveled_slots", amount = 1 }
+costs = { resource = "slot_3", amount = 1 }
 
-# The Lightning Bolt decision is a stochastic, friendly-fire-aware AI block, so
-# it lives in the Python escape hatch (EvokerBrain) below — the hatch forces
-# "blast" or "standard" each turn. The `when` here is a defensive floor only (a
-# clean 2+ line): it matters solely if the hatch ever falls through.
-[multiattack.blast]
+[abilities.shatter]                        # 2nd level — 10-ft sphere, DC 15 Con
+kind = "save"
+ability = "constitution"
+dc = 15
+damage = "3d8"
+damage_type = "thunder"
+half_on_save = true
+area = { shape = "sphere", radius_ft = 10, range_ft = 60 }
+costs = { resource = "slot_2", amount = 1 }
+
+[abilities.thunderwave]                     # 1st level — 15-ft cube from caster, DC 15 Con
+kind = "save"
+ability = "constitution"
+dc = 15
+damage = "2d8"
+damage_type = "thunder"
+half_on_save = true
+area = { shape = "cube", size_ft = 15 }
+costs = { resource = "slot_1", amount = 1 }
+# NOTE: RAW also pushes failed targets 10 ft; push is deferred (logged in plan).
+
+# Each leveled spell is its own multiattack option. The EvokerBrainL6 hatch
+# forces the choice each turn; the `when` floors (slot present + a 2+ area) only
+# matter if the hatch ever falls through. `standard` (Fire Bolt cantrip) is the
+# fallback when no leveled cast is worthwhile.
+[multiattack.cast_fireball]
+actions = ["fireball"]
+when = "resource_available('slot_3') and aoe_targets('fireball') >= 2"
+priority = 40
+[multiattack.cast_lightning]
 actions = ["lightning_bolt"]
-when = "aoe_targets('lightning_bolt') >= 2"
+when = "resource_available('slot_3') and aoe_targets('lightning_bolt') >= 2"
+priority = 30
+[multiattack.cast_shatter]
+actions = ["shatter"]
+when = "resource_available('slot_2') and aoe_targets('shatter') >= 2"
+priority = 20
+[multiattack.cast_thunderwave]
+actions = ["thunderwave"]
+when = "resource_available('slot_1') and aoe_targets('thunderwave') >= 2"
 priority = 10
-
 [multiattack.standard]
 actions = ["fire_bolt"]
 priority = 0
@@ -80,7 +114,5 @@ priority = 0
 [behavior]
 tactic = "kite"
 
-# The bolt-slot AI: per-round chance to spend a slot, aim to hit 2+ enemies with
-# no PC in the line, hold or nuke-solo otherwise (see the module for the knobs).
 [behavior.custom]
-handler = "python:dnd5e_behaviors.evoker_wizard.EvokerBrain"
+handler = "python:dnd5e_behaviors.evoker_wizard.EvokerBrainL6"

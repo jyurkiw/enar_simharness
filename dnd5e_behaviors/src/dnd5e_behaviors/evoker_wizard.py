@@ -94,3 +94,58 @@ class EvokerBrain:
             return False
         # Trial-seeded stream (never Python's random), so runs stay deterministic.
         return view.resolver.roll("1d100") <= round(p * 100)
+
+
+def _willing(view, curve: dict, rnd: int) -> bool:
+    return EvokerBrain._willing(view, curve, rnd)
+
+
+class EvokerBrainL6:
+    """The level-6 evoker's whole leveled-spell kit, not just Lightning Bolt.
+
+    Same competent-play calibration as EvokerBrain, extended to a 1st/2nd/3rd
+    slot budget and four AoE spells. Each turn it prefers the biggest available
+    spell that lands a clean multi-target hit (Fireball > Lightning > Shatter >
+    Thunder Wave — damage order), spends that slot, and otherwise falls back to
+    the cantrip. Sculpt Spells (allies auto-succeed) is layered on in a later
+    step by flipping `allow_allies` and honoring the `1 + spell level` protect
+    limit; until then it plays friendly-fire-safe (no ally in any area).
+    """
+
+    # (multiattack option, ability, slot resource, spell level), damage-priority order.
+    LEVELED = [
+        ("cast_fireball",    "fireball",       "slot_3", 3),
+        ("cast_lightning",   "lightning_bolt", "slot_3", 3),
+        ("cast_shatter",     "shatter",        "slot_2", 2),
+        ("cast_thunderwave", "thunderwave",    "slot_1", 1),
+    ]
+
+    def choose_multiattack(self, me, view):
+        from dnd5e import aoe
+        bf = view.battlefield
+        rnd = view.round_index
+        if not any(me.resources.get(slot, 0) > 0 for _, _, slot, _ in self.LEVELED):
+            return "standard"  # out of leveled slots -> cantrip
+
+        def first_clearing(min_enemies):
+            for opt, spell, slot, _lvl in self.LEVELED:
+                ab = me.statblock.abilities.get(spell)
+                if ab is None or ab.area is None or me.resources.get(slot, 0) <= 0:
+                    continue
+                if aoe.best_area(bf, me, ab.area, allow_allies=False, min_enemies=min_enemies) is not None:
+                    return opt
+            return None
+
+        multi = first_clearing(2)
+        if multi is not None and _willing(view, CAST_CHANCE_MULTI, rnd):
+            return multi
+        solo = first_clearing(1)
+        if solo is not None and _willing(view, CAST_CHANCE_SOLO, rnd):
+            return solo
+        return "standard"
+
+    def choose_target(self, me, ability, pool, view):
+        return None
+
+    def plan_movement(self, me, view):
+        return None
