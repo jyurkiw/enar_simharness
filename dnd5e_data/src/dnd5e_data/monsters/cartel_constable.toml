@@ -33,6 +33,7 @@
 # four and the one the engine can state honestly.
 name = "cartel_constable"
 display_name = "Southern Gate Guard Cartel Constable"
+tags = ["commander"]   # intrinsic role tag — the retreat gate keys on this
 
 [classification]
 size = "Medium"

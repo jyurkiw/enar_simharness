@@ -1,0 +1,181 @@
+# THE OPERA HOUSE — "the big fight". 5 level-6 PCs vs the Southern Gate Guard
+# Cartel's full opera-house deployment: an 18-guard opening confrontation plus
+# timed reinforcement waves. The question this first pass answers is narrow and
+# deliberate: **can the party avoid a TPK?** Everyone down-or-manacled is an
+# acceptable outcome; everyone *dead* is the failure state (there's a
+# still-to-model "the house is on fire" layer on top of this).
+#
+# ============================ SCOPE OF THIS FIRST PASS ========================
+# This models the PART of the scene the PCs actually fight: the guards. A large
+# amount of the written encounter is scripted narrative that does not bear on
+# whether the PARTY survives, and is therefore NOT simulated here. Each omission
+# is deliberate and listed so the number is read honestly:
+#
+#   * The stage subplot is absent. Nico, Guy, Véronique and Mélisse are not on
+#     the board. Véronique "stands back" and aids Guy against Nico, not the PCs;
+#     the nobles leave by round 4. So none of them attack the party, and leaving
+#     them off changes nothing about the party's survival — it only removes
+#     Véronique's command support for the guards (a real omission; see below).
+#   * The two SLINGER COVER SQUADS (round-3 stage-east, and the retreat-cover
+#     trio) exist to protect the nobles' exit — an unmodeled event. They fire
+#     Low Bolo / Stone (control, ~no damage), so they barely move a TPK number.
+#     Omitted for now.
+#   * The "if the PCs approach the stage, trickle one more squad #1 per round
+#     while <4 guards remain" rule is conditional spawning the static
+#     reinforcement system can't express. Omitted.
+#   * The Constable-death "retreat one round until Véronique rallies" reprieve is
+#     NOT modeled — and the mook statblocks' own end-of-fight retreat (which ends
+#     the trial when the Constable dies) is DISABLED here via the overrides
+#     below, because in this scene killing the Constable must not end the fight.
+#     Net effect: the guards fight on regardless of the Constable. Conservative
+#     (harder on the party than the written scene).
+#   * The guards "won't fight to kill" falls out for free: `enemies_of` drops
+#     downed creatures from every targeting pool, so a guard never keeps hitting
+#     a PC who's already at 0 — it moves to the next standing target. A downed PC
+#     can still DIE, but only from death-save failures or a single overkill blow,
+#     which is exactly the "we'll drop you, not execute you" intent. Manacling a
+#     *downed* PC specifically isn't modeled (a downed PC is already out); the
+#     Vises still manacle Grappled/Restrained targets mid-fight.
+#
+# GEOGRAPHY CAVEAT — the biggest thing to eyeball in the first results. The house
+# is 79 squares deep. The initial guards confront the PCs in the SOUTH (near the
+# entrance, `guard_main` on the board); the two reinforcement doors are at the
+# PIT, ~45 squares north. Through the open central aisle that's ~7-8 rounds of
+# travel, so in a ~10-round fight the pit reinforcements may never reach the
+# melee. If the by-combatant table shows the r2/r4 waves dealing ~0, that's why
+# — and it's the first thing to fix with you (start the PCs further north? move
+# the doors? have the initial screen fall back and draw the party in?).
+name = "opera_house"
+description = "The big fight: 5 level-6 PCs vs the Guard Cartel's opera-house deployment (18 guards + waves)"
+
+board = "lib:opera_house"
+
+[simulation]
+trials = 10                 # LOW while developing — raise once it behaves
+max_rounds = 30             # a SAFETY cap, not the intended end — the trial ends
+                            # when a PC reaches the stage (the [objective] below)
+                            # or a side is wiped. 30 is "effectively no cap"; a
+                            # push up a 60-row house tops out well under it.
+seed = 20260724
+grapple_escape = true
+
+# The guards are an ARREST force — their goal is to subdue, not kill. Reducing a
+# PC to 0 HP knocks them out cold and STABLE (RAW: a melee hit to 0 may knock
+# unconscious; here it's the whole force's standing order), not dying. So a
+# defeated party doesn't die — it ends up unconscious and manacled on the floor,
+# which IS the scripted transition into the burning-building phase 2. There is
+# no guard-caused TPK; the only way a PC actually dies here is the fire, modeled
+# later. (RAW knockout is melee-only; applied force-wide for the arrest premise.)
+subduing_side = "monsters"
+
+# The party's goal is the stage (save Nico): they push NORTH and the fight ends
+# the instant a PC reaches it. The stage floor is y<=12 and the step is y=13, so
+# "reached the stage" = a runner at y<=13. This turns the sim into the question
+# that actually matters here — can the guards STOP the runners with their
+# grapple/manacle/bolo control before the party breaks through? — rather than a
+# stand-and-trade the party trivially wins.
+[objective]
+reach_y = 13
+
+# -------------------------------- the party ---------------------------------
+[[combatants]]
+creature = "champion_fighter_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard_l6"
+side = "party"
+spawn = "party"
+
+# ------------------------ the opening 18-guard force -------------------------
+[[combatants]]
+creature = "cartel_watchman"
+side = "monsters"
+spawn = "guard_main"
+count = 10
+
+[[combatants]]
+creature = "cartel_vise"
+side = "monsters"
+spawn = "guard_main"
+count = 5
+
+[[combatants]]
+creature = "cartel_hound"
+side = "monsters"
+spawn = "guard_main"
+count = 2
+
+[[combatants]]
+creature = "cartel_constable"
+side = "monsters"
+spawn = "guard_main"
+count = 1
+
+# ---------------------------- reinforcement waves ---------------------------
+# Squad #1 — round 2, east pit door.
+[[reinforcements]]
+first_round = 2
+spawn = "pit_east"
+combatants = [
+  { creature = "cartel_vise", count = 2 },
+  { creature = "cartel_slinger", count = 2 },
+  { creature = "cartel_hound", count = 1 },
+]
+
+# Squad #2 — round 4, west pit door (with the two Mage Apprentices).
+[[reinforcements]]
+first_round = 4
+spawn = "pit_west"
+combatants = [
+  { creature = "cartel_vise", count = 2 },
+  { creature = "cartel_slinger", count = 2 },
+  { creature = "mage_apprentice", count = 2 },
+]
+
+# ------------------------------- overrides ----------------------------------
+# Disable the cartel mooks' built-in "retreat when the Constable is down"
+# end_trial option (it belongs to the standalone guard_cartel skirmish, where
+# breaking the squad ends the fight). Here the scene has its own retreat timing,
+# so the mooks must keep fighting. `round()` is 1-based, so `round() < 1` never
+# holds — the retreat option is simply never eligible.
+# The opera-house manacle model (the guards are here to CAPTURE, not kill):
+#   * `neutralizes` — a bound PC drops out of the guards' targeting, so the
+#     cartel leaves it helpless on the floor instead of clubbing it to 0. This
+#     is what makes a defeated party a CAPTURED party (conscious, bound, can
+#     roll to escape = survivable) rather than a pile of death saves.
+#   * `recharge = "5-6"` — "pick up and re-use their manacles" (the base file is
+#     once-per-day; here a Vise re-binds every few turns).
+[overrides.cartel_vise.conditions.manacled]
+neutralizes = true
+
+[overrides.cartel_vise.resources.manacles]
+recharge = "5-6"
+
+[overrides.cartel_vise.multiattack.retreat]
+when = "round() < 1"
+
+[overrides.cartel_hound.multiattack.retreat]
+when = "round() < 1"
+
+[overrides.cartel_slinger.multiattack.retreat]
+when = "round() < 1"
+
+[output]
+report = ["totals", "survival"]

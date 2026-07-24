@@ -198,6 +198,18 @@ def grants_for(creature: "Creature", grant_name: str, *,
     return matches
 
 
+def is_neutralized(creature: "Creature", *, condition_defs: dict) -> bool:
+    """True if any condition on `creature` is defined `neutralizes = true` — it's
+    been taken out of the fight without being killed (the cartel's manacled
+    condition). `battlefield.enemies_of` drops such creatures from targeting, so
+    the guards leave a bound PC helpless on the floor and move on."""
+    for instance in creature.conditions:
+        cdef = condition_defs.get(instance.name)
+        if cdef is not None and cdef.neutralizes:
+            return True
+    return False
+
+
 def speed_is_zero(creature: "Creature", *, condition_defs: dict) -> bool:
     """True when any condition on `creature` grants `grant_speed_zero` — the
     Guard Cartel Slinger's Low Bolo ("the target's Speed becomes 0"). Read by

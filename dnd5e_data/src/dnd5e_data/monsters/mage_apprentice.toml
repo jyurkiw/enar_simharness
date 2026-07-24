@@ -1,0 +1,85 @@
+# Mage Apprentice — CR 2 (MM), the two that arrive with reinforcement squad #2,
+# with Ice Knife replaced by Cause Fear per the encounter note. A back-line
+# caster: chip damage from a fire bolt, and Cause Fear to send a mobile PC
+# running for the corner.
+#
+# APPROXIMATION FLAGGED: Cause Fear applies `frightened`, which in this engine is
+# a marker with no wired mechanical effect (only blinded/bane/bless/stunned/etc.
+# do anything — see conditions.py). RAW frightened is disadvantage on attacks and
+# ability checks while the source is in sight, plus "can't willingly move closer".
+# The encounter's actual intent — "run toward the south-eastern corner" — is
+# forced movement the engine can't express at all. So in-sim the Mage Apprentice
+# is, for now, essentially a fire-bolt plinker; its control contribution is NOT
+# modeled. Noted because it makes squad #2 read as less threatening than designed.
+name = "mage_apprentice"
+display_name = "Mage Apprentice"
+tags = ["mage"]
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+alignment = "Lawful Neutral"
+cr = 2
+
+[stats]
+strength = 9
+dexterity = 14
+constitution = 11
+intelligence = 14
+wisdom = 11
+charisma = 11
+ac = 12
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 27
+hit_dice = "6d8"
+
+[stats.saves]
+intelligence = 4
+wisdom = 2
+
+[stats.senses]
+passive_perception = 10
+
+[abilities.fire_bolt]
+kind = "attack"
+to_hit = 4
+damage = "2d10"
+damage_type = "fire"
+range_normal = 120
+range_long = 120
+requires_sight = true
+
+# Cause Fear: DC 12 Wisdom save, frightened on a fail. Aimed at a PC that can
+# still move (not already down/frightened) — the encounter's "target any PC
+# capable of moving around". See the header note on why the frightened result is
+# currently inert in-engine.
+[abilities.cause_fear]
+kind = "save"
+ability = "wisdom"
+dc = 12
+target_filter = "not is_down(target) and not has_condition(target, 'frightened')"
+on_fail = [ { effect = "attach_condition", condition = "frightened" } ]
+
+[abilities.commanded_strike]
+kind = "attack"
+to_hit = 4
+damage = "2d10"
+damage_type = "fire"
+range_normal = 120
+range_long = 120
+requires_sight = true
+
+[multiattack.frighten]
+actions = ["cause_fear"]
+when = "any(enemies, not is_down(it) and not has_condition(it, 'frightened') and distance(self, it) <= 90)"
+priority = 20
+
+[multiattack.standard]
+actions = ["fire_bolt"]
+priority = 0
+
+[behavior]
+tactic = "kite"

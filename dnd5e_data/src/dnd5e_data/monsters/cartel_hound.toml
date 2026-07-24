@@ -20,6 +20,7 @@
 # both melee-reach checks and the `engage` tactic's stopping distance.
 name = "cartel_hound"
 display_name = "Southern Gate Guard Cartel Hound"
+tags = ["hound"]     # intrinsic role tag — see cartel_vise.toml
 
 [classification]
 size = "Medium"

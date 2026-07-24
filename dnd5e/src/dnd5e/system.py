@@ -108,7 +108,8 @@ class Dnd5eSystem:
     def __init__(self, *, board, roster: list, max_rounds: int, hp_mode: str = "average",
                  focus: Optional[dict] = None, obscurement: tuple = (),
                  light_plan: Optional[object] = None, reinforcements: tuple = (),
-                 extraction: Optional[object] = None, grapple_escape: bool = False) -> None:
+                 extraction: Optional[object] = None, grapple_escape: bool = False,
+                 objective: Optional[object] = None, subduing_side: Optional[str] = None) -> None:
         self.board = board
         self.roster = roster
         self.max_rounds = max_rounds
@@ -116,6 +117,13 @@ class Dnd5eSystem:
         # `[simulation] grapple_escape` — see `_try_escape_grapple`. Off by
         # default so existing grapple sims keep their captured behavior.
         self.grapple_escape = grapple_escape
+        # `[objective]` (loader.ObjectiveSpec, duck-typed): a reach-a-zone goal.
+        # When set, `party_side` members advance toward `reach_y` (north) and the
+        # trial ends when one arrives. None for an ordinary fight.
+        self.objective = objective
+        # `[simulation] subduing_side`: this side knocks foes out cold (stable)
+        # instead of killing — see CombatContext. None for lethal combat.
+        self.subduing_side = subduing_side
         self.focus = dict(focus or {})
         # `[extraction]` (loader.ExtractionSpec, duck-typed): a smash-and-grab
         # objective + retreat. None for ordinary deathmatch sims.
@@ -162,7 +170,7 @@ class Dnd5eSystem:
         resolver = Resolver(ctx.dice)
         flags = FlagBag()
         combat_ctx = CombatContext(resolver, battlefield, ctx.ledger, flags=flags,
-                                   condition_defs=self.condition_defs)
+                                   condition_defs=self.condition_defs, subduing_side=self.subduing_side)
 
         for creature in creatures:
             self._prime(creature, combat_ctx, resolver)
@@ -324,6 +332,13 @@ class Dnd5eSystem:
                                        turn_order=game.turn_order, flags=game.flags,
                                        resolver=game.combat_ctx.resolver)
         option = select_multiattack(actor, behavior_ctx)
+
+        # A party member with a reach-a-zone `[objective]` pushes toward the
+        # stage instead of running its normal tactic (see `_advance_to_stage`).
+        if self.objective is not None and actor.side == self.objective.party_side:
+            self._advance_to_stage(ctx, actor, option, game, behavior_ctx)
+            return
+
         if option is None:
             return
 
@@ -352,6 +367,40 @@ class Dnd5eSystem:
                 movement.apply_tactic(actor.statblock.behavior.tactic, actor, targets[0], game.battlefield,
                                       max_range_ft=ability.range_normal)
             self._offer_opportunity_attacks(actor, before, actor.coord, game, ctx)
+            resolve_ability(game.combat_ctx, actor, ability, targets)
+            _spend_costs(actor, ability)
+
+    def _reached_objective(self, actor: Creature) -> bool:
+        return (self.objective is not None and actor.coord is not None
+                and actor.y <= self.objective.reach_y)
+
+    def _advance_to_stage(self, ctx: TrialContext, actor: Creature, option, game: GameState,
+                          behavior_ctx) -> None:
+        """The reach-a-zone objective's turn (design: sims/opera_house). The
+        actor spends its move heading straight north toward the stage
+        (`move_to_cell` to (its x, reach_y) — pathing routes it around bodies and
+        up the open aisle), provoking opportunity attacks on the way, and ends
+        the trial the instant it arrives. It does NOT chase enemies: it then
+        makes its option's attacks only against whatever its normal targeting
+        finds *in reach after moving* (a melee swing at a blocker that stepped
+        into the way; a ranged shot at anything in range) — a runner taking
+        opportunistic swings, not a fighter picking a fight. Immobilised (Speed 0
+        from a bolo or manacles) it simply can't advance; grappled-and-taxed it
+        already spent the turn escaping upstream in `_take_turn_body`."""
+        before = actor.coord
+        if before is not None:
+            movement.move_to_cell(actor, (actor.x, self.objective.reach_y), game.battlefield)
+            self._offer_opportunity_attacks(actor, before, actor.coord, game, ctx)
+        if self._reached_objective(actor):
+            game.combat_ctx.end_trial(outcome={"reached_stage": 1, "reach_round": ctx.round_index})
+            return
+        if option is None:
+            return
+        for action_name in option.actions:
+            ability = actor.statblock.abilities[action_name]
+            targets = select_targets(actor, ability, behavior_ctx)
+            if not targets:
+                continue
             resolve_ability(game.combat_ctx, actor, ability, targets)
             _spend_costs(actor, ability)
 
@@ -398,6 +447,11 @@ class Dnd5eSystem:
             nobody_down = bool(party) and not any(m.is_down for m in party)
             outcome["secured"] = int(secured)
             outcome["extracted"] = int(secured and nobody_down)
+        # Reach-a-zone objective: default 0 so a trial that ended by wipe or the
+        # round cap reads as "didn't reach"; the `end_trial` outcome below flips
+        # it to 1 (and adds `reach_round`) when a runner broke through.
+        if self.objective is not None:
+            outcome["reached_stage"] = 0
         outcome.update(game.combat_ctx.trial_outcome)
         return outcome
 

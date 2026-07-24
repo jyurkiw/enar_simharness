@@ -263,6 +263,9 @@ SELECTOR_NAMES = frozenset({
     # `allies` deliberately excludes the Down (battlefield.allies_of), so a
     # healer's "who needs raising" query needs its own selector.
     "downed_allies",
+    # `enemies` likewise excludes the Down, so a "bind the helpless" ability
+    # (the Guard Cartel Vise manacling a downed PC) needs its own.
+    "downed_enemies",
 })
 
 # Call-syntax functions (design doc 04 section 1's function registry, v1).
@@ -274,7 +277,7 @@ FUNCTION_NAMES = frozenset({
     "resource_available", "round", "has_flag", "any_yet_to_act", "side_of",
     "enemies_within", "allies_within", "enemies_tagged", "allies_tagged",
     "enemies_within_of", "allies_within_of", "turn_marked", "aoe_targets",
-    "temp_hp", "reaction_available",
+    "temp_hp", "reaction_available", "is_source_of",
 })
 
 
@@ -338,6 +341,7 @@ class Scope(Protocol):
     def allies(self) -> Sequence[Any]: ...
     def enemies_grappled_by_self(self) -> Sequence[Any]: ...
     def downed_allies(self) -> Sequence[Any]: ...
+    def downed_enemies(self) -> Sequence[Any]: ...
     def enemies_within(self, ft: float) -> Sequence[Any]: ...
     def allies_within(self, ft: float) -> Sequence[Any]: ...
     def enemies_tagged(self, tag: str) -> Sequence[Any]: ...
@@ -364,6 +368,7 @@ class Scope(Protocol):
     def resource_available(self, name: str) -> bool: ...
     def temp_hp(self, who: Any) -> float: ...
     def reaction_available(self, who: Any) -> bool: ...
+    def is_source_of(self, condition: str) -> bool: ...
     def aoe_targets(self, ability_name: str) -> int: ...
     def round_number(self) -> int: ...
     def has_flag(self, name: str) -> bool: ...
@@ -426,6 +431,8 @@ def _eval_selector(node: Selector, scope: Scope) -> Any:
         return scope.enemies_grappled_by_self()
     if root == "downed_allies":
         return scope.downed_allies()
+    if root == "downed_enemies":
+        return scope.downed_enemies()
     if root == "nearest_enemy":
         return scope.nearest_enemy()
     if root == "ally_lowest_hp":
@@ -500,6 +507,7 @@ _CALL_TABLE: dict[str, Callable[..., Any]] = {
     "is_down": lambda scope, who: scope.is_down(who),
     "temp_hp": lambda scope, who: scope.temp_hp(who),
     "reaction_available": lambda scope, who: scope.reaction_available(who),
+    "is_source_of": lambda scope, name: scope.is_source_of(name),
     "distance": lambda scope, a, b: scope.distance(a, b),
     "within": lambda scope, who, ft: scope.distance(scope.self_creature(), who) <= ft,
     "can_see": lambda scope, a, b: scope.can_see(a, b),

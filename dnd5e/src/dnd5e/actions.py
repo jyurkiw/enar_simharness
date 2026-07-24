@@ -48,10 +48,19 @@ class CombatContext:
     damage/condition mechanics, shared by every trial via a fresh instance."""
 
     def __init__(self, resolver: Resolver, battlefield: Battlefield, ledger, *,
-                 flags: Optional[FlagBag] = None, condition_defs: Optional[dict] = None) -> None:
+                 flags: Optional[FlagBag] = None, condition_defs: Optional[dict] = None,
+                 subduing_side: Optional[str] = None) -> None:
         self.resolver = resolver
         self.battlefield = battlefield
         self.ledger = ledger
+        # `[simulation] subduing_side`: a side that ARRESTS rather than kills.
+        # When one of its members reduces an enemy to 0 HP, the enemy is knocked
+        # unconscious *and stable* (RAW: a melee hit to 0 may knock out) instead
+        # of dying — no death saves, no massive-damage instakill. Models the
+        # opera-house guards, whose goal is to subdue the party (a "TPK" here is
+        # the scripted hand-off into the burning-building phase, not a campaign
+        # end). None = ordinary lethal combat.
+        self.subduing_side = subduing_side
         self.flags = flags if flags is not None else FlagBag()
         # Workspace-wide `dict[str, statblock.ConditionDef]` (design doc 03
         # section 3) — `system.py` builds this once from every roster
@@ -282,7 +291,9 @@ class CombatContext:
             target.temp_hp -= absorbed
             amount -= absorbed
         target.current_damage += amount
-        self._sync_hp_conditions(target, was_down)
+        nonlethal = (self.subduing_side is not None and attacker is not None
+                     and attacker.side == self.subduing_side)
+        self._sync_hp_conditions(target, was_down, nonlethal=nonlethal)
         return amount
 
     def heal(self, target: Creature, amount: int) -> int:
@@ -294,15 +305,23 @@ class CombatContext:
         self._sync_hp_conditions(target, was_down)
         return healed
 
-    def _sync_hp_conditions(self, target: Creature, was_down: bool) -> None:
+    def _sync_hp_conditions(self, target: Creature, was_down: bool, *, nonlethal: bool = False) -> None:
         if target.is_down:
             if not was_down:
-                # Newly dropped to 0: begin dying with a clean tally, unless
-                # the overkill is massive (>= max HP): instant death.
-                target.death_save_successes = 0
-                target.death_save_failures = 0
-                if target.current_damage - target.hp >= target.hp:
-                    target.death_save_failures = 3
+                if nonlethal:
+                    # Subdued: knocked out cold but STABLE (death_save_successes
+                    # = 3 → `_roll_death_save` skips it, `is_stabilized` is true).
+                    # No death saves, and nonlethal never instakills on overkill.
+                    # It stays unconscious at 0 HP until healed or the scene ends.
+                    target.death_save_successes = 3
+                    target.death_save_failures = 0
+                else:
+                    # Newly dropped to 0: begin dying with a clean tally, unless
+                    # the overkill is massive (>= max HP): instant death.
+                    target.death_save_successes = 0
+                    target.death_save_failures = 0
+                    if target.current_damage - target.hp >= target.hp:
+                        target.death_save_failures = 3
                 # A grappler that drops releases whoever it was holding.
                 for freed_name in self.battlefield.grabbed_targets(target.instance_name):
                     freed = self.battlefield.creatures.get(freed_name)

@@ -32,6 +32,7 @@ from typing import Iterable, Optional
 
 from dnd_board import Board, ObscurementField, Region
 
+from . import conditions as _conditions
 from . import vision as _vision
 from .creature import Creature
 
@@ -93,8 +94,12 @@ class Battlefield:
         return [c for c in self.creatures.values() if c.side == side]
 
     def enemies_of(self, actor: Creature) -> list[Creature]:
-        """Live (not Down) enemies. Use `members()` for downed ones too."""
-        return [c for c in self.creatures.values() if c.side != actor.side and not c.is_down]
+        """Live (not Down) enemies that are still in the fight. Excludes anyone
+        carrying a `neutralizes` condition (a manacled, bound-and-helpless PC) —
+        the guards leave them and move on. Use `members()` for everyone."""
+        return [c for c in self.creatures.values()
+                if c.side != actor.side and not c.is_down
+                and not _conditions.is_neutralized(c, condition_defs=self.condition_defs)]
 
     def allies_of(self, actor: Creature) -> list[Creature]:
         return [c for c in self.creatures.values()

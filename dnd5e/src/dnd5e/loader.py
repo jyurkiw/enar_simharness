@@ -284,7 +284,8 @@ def _build_condition_def(name: str, spec: dict, *, where: str) -> ConditionDef:
     return ConditionDef(name=name, grants=tuple(grants), exclusive=exclusive,
                         ends_with_source=spec.get("ends_with_source", True),
                         expires=expires, unless=unless,
-                        save_ability=save_ability, save_dc=save_dc)
+                        save_ability=save_ability, save_dc=save_dc,
+                        neutralizes=bool(spec.get("neutralizes", False)))
 
 
 def _build_reaction(name: str, spec: dict, *, where: str, known_conditions: frozenset) -> Reaction:
@@ -489,6 +490,20 @@ class ExtractionSpec:
 
 
 @dataclass(frozen=True)
+class ObjectiveSpec:
+    """`[objective]` (a reach-a-zone goal, the dual of `[extraction]`'s
+    destroy-a-creature goal): the `party_side` pushes NORTH toward the stage and
+    the trial ends the moment any member's `y <= reach_y`. Party members advance
+    toward the zone each turn (attacking only what ends up in reach) instead of
+    running their normal engage/kite tactic — the "fight your way to the stage"
+    model. Used by sims/opera_house to ask whether the guards can stop the
+    runners before they break through."""
+
+    reach_y: int
+    party_side: str = "party"
+
+
+@dataclass(frozen=True)
 class SimulationSpec:
     name: str
     board: object  # dnd_board.Board
@@ -503,9 +518,13 @@ class SimulationSpec:
     light_plan: Optional[LightPlanSpec] = None
     reinforcements: tuple = ()            # tuple[(round_index, tuple[RosterSlot]), ...]
     extraction: Optional["ExtractionSpec"] = None
+    objective: Optional["ObjectiveSpec"] = None
     # `[simulation] grapple_escape`: model RAW 2024's "escaping costs your
     # action" (system._try_escape_grapple). Opt-in — see that method for why.
     grapple_escape: bool = False
+    # `[simulation] subduing_side`: a side that knocks foes out cold (stable)
+    # rather than killing (CombatContext). None = ordinary lethal combat.
+    subduing_side: Optional[str] = None
 
 
 def _resolve_creature_path(name: str, *, sim_dir: Path, sources: list) -> Path:
@@ -668,11 +687,19 @@ def build_simulation(cfg: dict, *, sim_dir: Path, name_fallback: str,
                                     cover_rounds=ex.get("cover_rounds", 1),
                                     party_side=ex.get("party_side", "party"))
 
+    objective = None
+    if "objective" in cfg:
+        ob = cfg["objective"]
+        require_keys(ob, ["reach_y"], where=f"{path} [objective]")
+        objective = ObjectiveSpec(reach_y=int(ob["reach_y"]),
+                                  party_side=ob.get("party_side", "party"))
+
     return SimulationSpec(
         name=cfg.get("name", name_fallback), board=board, roster=roster,
         trials=sim["trials"], max_rounds=sim["max_rounds"], seed=sim["seed"],
         hp_mode=hp_mode, focus=focus, output=cfg.get("output", {}),
         obscurement=tuple(obscurement), light_plan=light_plan,
-        reinforcements=tuple(reinforcements), extraction=extraction,
+        reinforcements=tuple(reinforcements), extraction=extraction, objective=objective,
         grapple_escape=bool(sim.get("grapple_escape", False)),
+        subduing_side=sim.get("subduing_side"),
     )

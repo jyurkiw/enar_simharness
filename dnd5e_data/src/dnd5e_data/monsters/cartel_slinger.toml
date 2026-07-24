@@ -29,6 +29,7 @@
 # running, else blind-fire High Bolos at whoever's swinging.
 name = "cartel_slinger"
 display_name = "Southern Gate Guard Cartel Slinger"
+tags = ["slinger"]   # intrinsic role tag — see cartel_vise.toml
 
 [classification]
 size = "Medium"

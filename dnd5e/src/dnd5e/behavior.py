@@ -109,6 +109,14 @@ class ConcreteScope:
         return [c for c in bf.members(self._self.side)
                 if c.is_down and c.instance_name != self._self.instance_name]
 
+    def downed_enemies(self):
+        """Down (0 HP) enemies — the mirror of `downed_allies`, for a "bind the
+        helpless" ability (the Vise manacling a downed PC). `enemies()` excludes
+        the Down, so it can't serve this."""
+        bf = self._ctx.battlefield
+        return [c for c in bf.creatures.values()
+                if c.side != self._self.side and c.is_down]
+
     def enemies_within(self, ft: float):
         bf = self._ctx.battlefield
         return [e for e in self.enemies() if (bf.distance_ft(self._self, e) or 0) <= ft]
@@ -179,6 +187,16 @@ class ConcreteScope:
         Constable reads this before spending an action on Commander's Strike,
         which needs the *ally's* reaction, not its own."""
         return not who.round_scratch.get("reaction_used")
+
+    def is_source_of(self, condition: str) -> bool:
+        """True if `self` is the source of a `condition` currently on any
+        creature — "am I already holding a prisoner?" for the Vise's manacle,
+        so it keeps its one prisoner (one set of cuffs) instead of churning to a
+        fresh target and freeing the old one."""
+        me = self._self.instance_name
+        return any(inst.name == condition and inst.source == me
+                   for c in self._ctx.battlefield.creatures.values()
+                   for inst in c.conditions)
 
     def is_down(self, who) -> bool:
         return who.is_down

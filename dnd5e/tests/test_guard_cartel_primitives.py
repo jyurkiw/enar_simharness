@@ -350,6 +350,172 @@ def grapple_trial(tmp_path, *, payoff_at):
     return system, ctx, pc, grappler
 
 
+# ---- bonus: subduing_side (arrest, don't kill) ------------------------------
+
+
+def test_subduing_side_knocks_out_stable_instead_of_killing(tmp_path):
+    board = make_board(tmp_path)
+    # The "guard" subdues; the "pc" has 5 HP and eats a huge hit that would
+    # normally be instant death (overkill >= max HP). Subdued, it's knocked out
+    # cold but STABLE — down, not dead, not dying, won't roll death saves.
+    system = Dnd5eSystem(board=board, max_rounds=1, subduing_side="monsters", roster=[
+        RosterSlot(statblock=simple_statblock("pc", hp_average=5), instance_name="pc",
+                   side="party", start=(0, 0)),
+        RosterSlot(statblock=simple_statblock("guard"), instance_name="guard",
+                   side="monsters", start=(1, 0)),
+    ])
+    ctx = make_ctx([10, 10])
+    system.setup_trial(ctx)
+    pc, guard = ctx.game.creatures["pc"], ctx.game.creatures["guard"]
+
+    ctx.game.combat_ctx.deal(guard, pc, 999, "club")
+
+    assert pc.is_down and not pc.is_dead and pc.is_stabilized
+    # A death-save roll is a no-op on a stable creature — it never dies.
+    system._roll_death_save(pc, ctx.game.combat_ctx)
+    assert not pc.is_dead
+
+
+def test_without_subduing_the_same_hit_kills(tmp_path):
+    board = make_board(tmp_path)
+    system = Dnd5eSystem(board=board, max_rounds=1, roster=[
+        RosterSlot(statblock=simple_statblock("pc", hp_average=5), instance_name="pc",
+                   side="party", start=(0, 0)),
+        RosterSlot(statblock=simple_statblock("guard"), instance_name="guard",
+                   side="monsters", start=(1, 0)),
+    ])
+    ctx = make_ctx([10, 10])
+    system.setup_trial(ctx)
+    pc, guard = ctx.game.creatures["pc"], ctx.game.creatures["guard"]
+
+    ctx.game.combat_ctx.deal(guard, pc, 999, "club")     # massive overkill
+    assert pc.is_dead                                     # instant death, lethal
+
+
+# ---- bonus: neutralizes (bound-and-left-alone) ------------------------------
+
+
+def test_neutralizes_condition_drops_the_bearer_from_enemy_targeting(tmp_path):
+    board = make_board(tmp_path)
+    captured = ConditionDef(name="captured", grants=(), neutralizes=True)
+    binder = Statblock(name="binder", display_name="binder", classification={}, stats=make_stats(),
+                       abilities=simple_statblock("x").abilities,
+                       multiattack=simple_statblock("x").multiattack,
+                       conditions={"captured": captured})
+    system = Dnd5eSystem(board=board, max_rounds=1, roster=[
+        RosterSlot(statblock=binder, instance_name="guard", side="monsters", start=(0, 0)),
+        RosterSlot(statblock=simple_statblock("pc1"), instance_name="pc1", side="party", start=(1, 0)),
+        RosterSlot(statblock=simple_statblock("pc2"), instance_name="pc2", side="party", start=(2, 0)),
+    ])
+    ctx = make_ctx([10, 10, 10])
+    system.setup_trial(ctx)
+    guard, pc1, pc2 = (ctx.game.creatures[n] for n in ("guard", "pc1", "pc2"))
+    bf = ctx.game.battlefield
+
+    assert {c.instance_name for c in bf.enemies_of(guard)} == {"pc1", "pc2"}
+    ctx.game.combat_ctx.apply_condition(pc1, "captured")
+    # pc1 is bound-and-left-alone: out of the guard's pool, but still alive and
+    # able to see its own enemies (its targeting is unaffected).
+    assert {c.instance_name for c in bf.enemies_of(guard)} == {"pc2"}
+    assert {c.instance_name for c in bf.enemies_of(pc1)} == {"guard"}
+
+
+def test_downed_enemies_selector_sees_the_down(tmp_path):
+    from dnd5e.behavior import BehaviorContext, ConcreteScope
+    from dnd5e import expressions
+    board = make_board(tmp_path)
+    system = Dnd5eSystem(board=board, max_rounds=1, roster=[
+        RosterSlot(statblock=simple_statblock("guard"), instance_name="guard", side="monsters", start=(0, 0)),
+        RosterSlot(statblock=simple_statblock("pc"), instance_name="pc", side="party", start=(1, 0)),
+    ])
+    ctx = make_ctx([10, 10])
+    system.setup_trial(ctx)
+    guard, pc = ctx.game.creatures["guard"], ctx.game.creatures["pc"]
+    pc.current_damage = pc.hp                 # drop pc to 0
+    bctx = BehaviorContext(battlefield=ctx.game.battlefield, round_index=1,
+                           turn_order=[], flags=ctx.game.flags, resolver=ctx.game.combat_ctx.resolver)
+    scope = ConcreteScope(bctx, guard)
+
+    assert [c.instance_name for c in scope.enemies()] == []             # excludes the Down
+    assert [c.instance_name for c in scope.downed_enemies()] == ["pc"]  # includes it
+    assert expressions.evaluate(expressions.parse("count(downed_enemies)"), scope) == 1
+
+
+# ---- bonus: the reach-a-zone [objective] ------------------------------------
+
+TALL_BOARD = '''
+name = "tall"
+map = """
+..........
+..........
+..........
+..........
+..........
+..........
+..........
+..........
+"""
+[meta]
+cell_feet = 5
+'''
+
+
+def test_reach_zone_objective_ends_the_trial_when_a_runner_arrives(tmp_path):
+    from simharness.ledger import Ledger
+    from simharness.runner import TrialRunner
+    from dnd5e.loader import ObjectiveSpec
+
+    p = tmp_path / "tall.toml"
+    p.write_text(TALL_BOARD)
+    board = load_board_toml(p)
+    # Runner starts at the south (y=7); the stage zone is y<=1. Speed 30 = 6
+    # cells, so it covers the 6 rows in a single turn. One lone enemy far to the
+    # side, so nothing blocks the sprint.
+    system = Dnd5eSystem(board=board, max_rounds=5, objective=ObjectiveSpec(reach_y=1), roster=[
+        RosterSlot(statblock=simple_statblock("runner"), instance_name="runner",
+                   side="party", start=(5, 7)),
+        RosterSlot(statblock=simple_statblock("guard"), instance_name="guard",
+                   side="monsters", start=(0, 7)),
+    ])
+    names = ["runner", "guard"]
+    side_of = {"runner": "party", "guard": "monsters"}
+    runner = TrialRunner(system, seed=1, max_rounds=5, names=names, side_of=side_of)
+    rows = runner.run(trials=1).rows
+
+    assert rows[0]["reached_stage"] == 1
+    assert rows[0]["reach_round"] == 1          # arrived on its first turn
+    assert rows[0]["rounds"] == 1               # ...and that ended the trial
+
+
+def test_reach_zone_objective_scores_zero_when_the_runner_never_arrives(tmp_path):
+    from simharness.runner import TrialRunner
+    from dnd5e.loader import ObjectiveSpec
+    from dnd5e.statblock import Trait
+
+    p = tmp_path / "tall.toml"
+    p.write_text(TALL_BOARD)
+    board = load_board_toml(p)
+    # Speed 0 (a bolo/manacle stand-in), self-applied at trial setup via a trait
+    # so it's present in the actual run: the runner is rooted and never reaches
+    # the zone, so the trial runs to the cap and scores reached_stage = 0.
+    rooted = ConditionDef(name="rooted", grants=(EffectCall(effect="grant_speed_zero"),))
+    root_trait = Trait(name="start_rooted",
+                       effects=(EffectCall(effect="attach_condition", args={"condition": "rooted"}),))
+    base = simple_statblock("runner")
+    sb = Statblock(name=base.name, display_name=base.display_name, classification={}, stats=base.stats,
+                   abilities=base.abilities, multiattack=base.multiattack,
+                   conditions={"rooted": rooted}, traits={"start_rooted": root_trait})
+    system = Dnd5eSystem(board=board, max_rounds=3, objective=ObjectiveSpec(reach_y=1), roster=[
+        RosterSlot(statblock=sb, instance_name="runner", side="party", start=(5, 7)),
+        RosterSlot(statblock=simple_statblock("guard"), instance_name="guard",
+                   side="monsters", start=(0, 7)),
+    ])
+    names, side_of = ["runner", "guard"], {"runner": "party", "guard": "monsters"}
+    runner = TrialRunner(system, seed=2, max_rounds=3, names=names, side_of=side_of)
+    rows = runner.run(trials=1).rows
+    assert rows[0]["reached_stage"] == 0
+
+
 @pytest.mark.parametrize("d20, escaped", [(18, True), (2, False)])
 def test_grapple_escape_costs_the_action_win_or_lose(tmp_path, d20, escaped):
     system, ctx, pc, grappler = grapple_trial(tmp_path, payoff_at=(2, 0))   # 10 ft away

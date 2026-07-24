@@ -156,6 +156,12 @@ class ConditionDef:
     # the bearer rolls, against what DC, to shake the condition off.
     save_ability: Optional[str] = None
     save_dc: Optional[int] = None
+    # When true, a creature carrying this condition drops out of its enemies'
+    # targeting entirely (like being Down) — it's been taken out of the fight
+    # without being killed. The Guard Cartel's manacled condition: bound and
+    # helpless, so the guards "leave them on the floor" and move on. The bearer
+    # can still act if conscious (its own targeting is unaffected).
+    neutralizes: bool = False
 
 
 @dataclass(frozen=True)

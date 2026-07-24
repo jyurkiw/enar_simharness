@@ -1,0 +1,58 @@
+# Southern Gate Guard Cartel Watchman — CR 1/8, the MM 2024 Guard statblock with
+# a club in place of the spear (per the opera-house encounter's note). The
+# cheap, numerous body of the cartel: ten of them open the fight. No control kit,
+# no manacles — just a club and a lot of friends.
+#
+# Guard (MM 2024): AC 16 (chain shirt + shield), HP 11 (2d8+2), the spear swapped
+# for a club (1d4+1 bludgeoning, +3 to hit). Everything else is the stock Guard.
+name = "cartel_watchman"
+display_name = "Southern Gate Guard Cartel Watchman"
+tags = ["watchman"]
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+alignment = "Lawful Neutral"
+cr = 0.125
+
+[stats]
+strength = 13
+dexterity = 12
+constitution = 12
+intelligence = 10
+wisdom = 11
+charisma = 10
+ac = 16
+speed = 30
+initiative_bonus = 1
+
+[stats.health]
+average = 11
+hit_dice = "2d8+2"
+
+[stats.senses]
+passive_perception = 12
+
+[abilities.club]
+kind = "attack"
+to_hit = 3
+damage = "1d4+1"
+damage_type = "bludgeoning"
+requires_sight = false
+
+# The Constable can order a Watchman to strike (Commander's Strike). Same club,
+# the +1d8 rides from the Constable's effect call.
+[abilities.commanded_strike]
+kind = "attack"
+to_hit = 3
+damage = "1d4+1"
+damage_type = "bludgeoning"
+requires_sight = false
+target_filter = "distance(self, target) <= 5"
+
+[multiattack.standard]
+actions = ["club"]
+priority = 0
+
+[behavior]
+tactic = "engage"

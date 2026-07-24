@@ -29,6 +29,10 @@
 # for the duration of the encounter, which is what `until_cured` gives.
 name = "cartel_vise"
 display_name = "Southern Gate Guard Cartel Vise"
+# Intrinsic role tag — so a reinforcement wave (loader spawns those without
+# combatant tags) still reads as a "vise" for the Constable's Commander's Strike
+# filter and the retreat gate. Unions with any per-combatant tags.
+tags = ["vise"]
 
 [classification]
 size = "Medium"
@@ -62,9 +66,21 @@ charisma = 0
 [stats.senses]
 passive_perception = 11
 
-# "the target has the Restrained condition until freed" — the manacles' own
-# escape DCs (20 Sleight of Hand / 25 Athletics / 15 with thieves' tools) are
-# out of reach in a fight, so this simply doesn't come off during the encounter.
+# The manacled condition: bound helpless. `grant_speed_zero` roots the target,
+# and it also stands in for Restrained on the Vise's own damage tiers (the club
+# riders below fire on manacled OR restrained). "One set of manacles" (a Vise
+# holds one prisoner at a time) is enforced on the BIND OPTIONS via
+# `not is_source_of('manacled')` — the Vise won't attempt a fresh bind while it
+# already holds a prisoner, so it keeps its one captive rather than churning to a
+# new target and freeing the old (which would feed a conscious prisoner back to
+# the swarm).
+#
+# NOTE: whether a bound PC is then LEFT ALONE (captured, survivable) or clubbed
+# further is controlled by the `neutralizes` flag, which is OFF here. The
+# standalone `guard_cartel` skirmish wants the Vise to keep clubbing a bound
+# target for its 19-damage Restrained tier; the opera-house scene wants capture
+# (leave them helpless) and turns `neutralizes` on via a sim-local override,
+# together with a Recharge for the manacles — see sims/opera_house.
 [conditions.manacled]
 grants = [ { effect = "grant_speed_zero" } ]
 expires = "until_cured"
@@ -77,24 +93,40 @@ damage = "1d6+2"
 damage_type = "bludgeoning"
 requires_sight = false          # a mundane weapon: swingable at what you can't see
 on_hit = [
-  { effect = "damage_rider", damage = "4d6", damage_type = "bludgeoning", name = "vise_restrained", when = "has_condition(target, 'restrained')" },
-  { effect = "damage_rider", damage = "2d6", damage_type = "bludgeoning", name = "vise_held", when = "not has_condition(target, 'restrained') and (has_condition(target, 'grappled') or has_condition(target, 'prone'))" },
+  { effect = "damage_rider", damage = "4d6", damage_type = "bludgeoning", name = "vise_restrained", when = "has_condition(target, 'restrained') or has_condition(target, 'manacled')" },
+  { effect = "damage_rider", damage = "2d6", damage_type = "bludgeoning", name = "vise_held", when = "not has_condition(target, 'restrained') and not has_condition(target, 'manacled') and (has_condition(target, 'grappled') or has_condition(target, 'prone'))" },
 ]
 
-# Manacle: only worth an action against an already-held target, and only once.
+# Manacle a CONTROLLED, still-conscious PC (grappled / stunned / restrained /
+# incapacitated) — DC 13 Dex save, bound on a fail. This is the preference-piece:
+# binding a controlled PC while it's still up leaves it conscious-but-helpless
+# (survivable) instead of the swarm beating it to 0.
 [abilities.manacle]
 kind = "save"
 ability = "dexterity"
 dc = 13
 targets = "enemies"
 max_targets = 1
-target_filter = "distance(self, target) <= 5 and not has_condition(target, 'manacled') and (has_condition(target, 'grappled') or has_condition(target, 'incapacitated') or has_condition(target, 'restrained'))"
+target_filter = "distance(self, target) <= 5 and not has_condition(target, 'manacled') and (has_condition(target, 'grappled') or has_condition(target, 'incapacitated') or has_condition(target, 'restrained') or has_condition(target, 'stunned'))"
 costs = { resource = "manacles", amount = 1 }
-on_fail = [
-  { effect = "attach_condition", condition = "restrained" },
-  { effect = "attach_condition", condition = "manacled" },
-]
+on_fail = [ { effect = "attach_condition", condition = "manacled" } ]
 
+# Manacle a DOWNED PC (0 HP, unconscious — no save, they're helpless). Binds them
+# on the floor, so if an ally heals them back up they come to bound and rooted
+# rather than free. `downed_enemies` is the Down-inclusive pool (`enemies`
+# excludes the Down).
+[abilities.manacle_downed]
+kind = "utility"
+targets = "downed_enemies"
+max_targets = 1
+target_filter = "distance(self, target) <= 5 and not has_condition(target, 'manacled')"
+costs = { resource = "manacles", amount = 1 }
+effects = [ { effect = "attach_condition", condition = "manacled" } ]
+
+# Guard-issue manacles. One charge; `per = "day"` here (the standalone
+# guard_cartel skirmish's once-per-fight capture tool). The opera-house scene
+# overrides this to `recharge = "5-6"` — "pick up and re-use their manacles" —
+# so the Vises keep binding across a long fight.
 [resources.manacles]
 uses = 1
 per = "day"
@@ -112,14 +144,25 @@ actions = ["withdraw"]
 when = "count(allies_tagged('commander')) == 0"
 priority = 100
 
+# THE MANACLE PREFERENCE. Binding a controlled, still-conscious PC is the top
+# priority (above clubbing) — that's the capture the whole faction is built
+# around, and it converts that PC to a survivable prisoner. Needs a charge
+# available (the recharge gate).
 [multiattack.bind]
 actions = ["manacle"]
-when = "any(enemies, distance(self, it) <= 5 and not has_condition(it, 'manacled') and (has_condition(it, 'grappled') or has_condition(it, 'incapacitated') or has_condition(it, 'restrained')))"
+when = "resource_available('manacles') and not is_source_of('manacled') and any(enemies, distance(self, it) <= 5 and not has_condition(it, 'manacled') and (has_condition(it, 'grappled') or has_condition(it, 'incapacitated') or has_condition(it, 'restrained') or has_condition(it, 'stunned')))"
 priority = 50
 
 [multiattack.standard]
 actions = ["club"]
 priority = 0
+
+# Bind a helpless downed PC only when there's no standing threat to club and no
+# conscious prisoner to take — lowest priority, pure mop-up (see manacle_downed).
+[multiattack.bind_downed]
+actions = ["manacle_downed"]
+when = "resource_available('manacles') and not is_source_of('manacled') and count(enemies_within(60)) == 0 and any(downed_enemies, distance(self, it) <= 5 and not has_condition(it, 'manacled'))"
+priority = -10
 
 # Commander's Strike hands this ability to the Vise as a reaction attack; the
 # +1d8 comes from the Constable's effect call, not from here.
@@ -130,8 +173,8 @@ damage = "1d6+2"
 damage_type = "bludgeoning"
 requires_sight = false
 on_hit = [
-  { effect = "damage_rider", damage = "4d6", damage_type = "bludgeoning", name = "vise_restrained", when = "has_condition(target, 'restrained')" },
-  { effect = "damage_rider", damage = "2d6", damage_type = "bludgeoning", name = "vise_held", when = "not has_condition(target, 'restrained') and (has_condition(target, 'grappled') or has_condition(target, 'prone'))" },
+  { effect = "damage_rider", damage = "4d6", damage_type = "bludgeoning", name = "vise_restrained", when = "has_condition(target, 'restrained') or has_condition(target, 'manacled')" },
+  { effect = "damage_rider", damage = "2d6", damage_type = "bludgeoning", name = "vise_held", when = "not has_condition(target, 'restrained') and not has_condition(target, 'manacled') and (has_condition(target, 'grappled') or has_condition(target, 'prone'))" },
 ]
 target_filter = "distance(self, target) <= 5"
 
