@@ -13,11 +13,23 @@ from typing import Optional
 
 from dnd_board import pathing as _bpath
 
+from . import conditions as _conditions
 from . import vision as _vision
 from .battlefield import Battlefield
 from .creature import Creature
 
 PHASE3_TACTICS = ("engage", "kite", "hold")
+
+
+def speed_ft(actor: Creature, battlefield: Battlefield) -> int:
+    """The actor's speed for *this* move, after conditions. A condition
+    granting `grant_speed_zero` (the Guard Cartel Slinger's Low Bolo, "the
+    target's Speed becomes 0") pins it to 0 — the creature still acts, it just
+    can't go anywhere. Every movement function in this module goes through
+    here rather than reading `Creature.speed_ft` directly."""
+    if _conditions.speed_is_zero(actor, condition_defs=battlefield.condition_defs):
+        return 0
+    return actor.speed_ft
 
 
 def apply_tactic(tactic: str, actor: Creature, target: Optional[Creature],
@@ -53,7 +65,7 @@ def move_to_cell(actor: Creature, dest: Optional[tuple[int, int]], battlefield: 
     route = _bpath.path(board, start, dest, blocked=occ)
     if len(route) <= 1:
         return
-    budget = board.feet_to_cells(actor.speed_ft)
+    budget = board.feet_to_cells(speed_ft(actor, battlefield))
     cost = board.move_cost_grid()
     for (ox, oy) in occ:
         cost[oy, ox] = 0
@@ -91,7 +103,7 @@ def kite(actor: Creature, target: Optional[Creature], battlefield: Battlefield, 
     board = battlefield.board
     start = actor.coord
     occ = battlefield.occupied_cells(exclude=(actor.instance_name, target.instance_name))
-    candidates = _bpath.reachable(board, start, actor.speed_ft, blocked=occ)
+    candidates = _bpath.reachable(board, start, speed_ft(actor, battlefield), blocked=occ)
     candidates.add(start)  # standing still is always an option
     goal = target.coord
     # Farthest-first: usually finds an in-range, sight-clear cell in a
@@ -118,7 +130,7 @@ def _move_toward(actor: Creature, target: Creature, battlefield: Battlefield, *,
     route = _bpath.path(board, start, goal, blocked=occ)
     if len(route) <= 1:
         return actor.coord
-    budget = board.feet_to_cells(actor.speed_ft)
+    budget = board.feet_to_cells(speed_ft(actor, battlefield))
     cost = board.move_cost_grid()
     for (ox, oy) in occ:
         cost[oy, ox] = 0
@@ -149,7 +161,7 @@ def _advance_to_los(actor: Creature, target: Creature, battlefield: Battlefield,
     route = _bpath.path(board, start, goal, blocked=occ)
     if len(route) <= 1:
         return
-    budget = board.feet_to_cells(actor.speed_ft)
+    budget = board.feet_to_cells(speed_ft(actor, battlefield))
     cost = board.move_cost_grid()
     for (ox, oy) in occ:
         cost[oy, ox] = 0

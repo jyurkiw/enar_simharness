@@ -270,6 +270,48 @@ target). Not re-opened.
 
 ---
 
+## Guard Cartel — one more real engine bug, fixed (2026-07)
+
+**A melee-only attack resolved at any range.** `actions.attack`'s "not in reach" branch
+treats the swing as ranged — cover, sight, then a range-band gate. An ability with no
+`range_normal` at all has no band to gate on, so a longsword could be swung across the
+whole board. Nothing had caught it because on the 30-ft `plain_room`/`arena` boards every
+melee monster closes to reach in round 1, so no swing was ever resolved out of reach. The
+Guard Cartel Constable is the first creature that deliberately *stays* 40 ft back (it
+holds position inside a 30 ft command leash issuing orders) and it was landing longsword
+hits from there. Fixed: melee-only + out of reach is now a miss, before any roll.
+
+One test had encoded the old behavior and was corrected
+(`test_marked_condition_survives_end_of_turn_if_bearer_attacked_someone_else` placed its
+bruiser 9 cells from a target it then hit; it now starts one move away). Effect on the
+Guard Cartel sim: TPK 2.4% -> 0.3%.
+
+**BLAST RADIUS — measured, and it is NOT small.** Mean damage per side, 300 trials each,
+before -> after (300 trials is indicative, not precise; skipping a swing also shifts the
+dice stream, so small deltas here are noise):
+
+| Sim | Monster dmg | Party dmg |
+|---|---|---|
+| `masks` | 111.8 -> 100.8 (-10%) | 367 -> 366 |
+| `cathedral` | 125.0 -> **99.1 (-21%)** | 485 -> **690 (+42%)** |
+| `otyugh_shadow_board` | 15.6 -> 12.5 (-20%) | 111 -> 109 |
+| `otyugh_cr5_dps` | 15.5 -> 19.7 | 112 -> 112 |
+| `werewolf_pack` | 241 -> 243 | 191 -> 215 |
+
+The direction is right everywhere it's large: a horde of melee defenders spread across a
+long board was getting free swings from across the room, and `cathedral` (20 defenders,
+40-long nave) had the most of them. Its knock-on is the big one — with the horde dealing
+a fifth less, the party survives longer and therefore deals far more.
+
+**`sims/cathedral/PLAN.md`'s FINDINGS tables predate this fix and should be re-run before
+they're trusted again.** The extraction numbers in particular (33%/17% clean extraction)
+were measured against a horde that could hit from out of reach.
+
+**Also worth knowing:** a melee creature that moves and still can't reach now does nothing
+that turn rather than swinging anyway. `plain_room` sims are *mostly* unaffected — but its
+spawn blocks are two cells deep, so a back-rank melee combatant starts 40 ft from the far
+rank and can no longer swing on round 1.
+
 ## Backlog status
 
 Everything originally listed here is now closed. Bugs A, B and C were real defects and

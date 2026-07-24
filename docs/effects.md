@@ -41,7 +41,7 @@ Any effect call may carry:
 | `require_save` | `ability`, `dc`, `on_fail?`, `on_success?` | A nested save with its own effect lists |
 | `damage_rider` | `damage`, `damage_type?`, `name?` | Extra dice on the triggering hit (crit-aware) |
 | `reduce_damage` | `factor` | Multiply the pending hit's damage (reaction only) |
-| `make_attack` | `ability` | Resolve one of the source's own abilities (reaction only) |
+| `make_attack` | `ability`, `actor?`, `bonus_damage?`, `uses_reaction?`, `name?` | Resolve an attack out of turn. Without `actor`, the source swings at the effect's target (opportunity attack). With `actor` (any creature ref), **that** creature attacks, picking its own target through its own targeting — Commander's Strike. `uses_reaction` spends the attacker's reaction and refuses if it's gone |
 | `mark_turn` | `key` | Set a once-per-turn marker, read by `turn_marked(key)` |
 | `set_flag` | `flag`, `scope?` (`round`/`trial`) | Set a flag, read by `has_flag()` |
 | `end_trial` | `outcome?` | End the trial now, merging extra outcome columns |
@@ -50,6 +50,7 @@ Any effect call may carry:
 | `emit_light` | `radius`, `start_round?` | Become a light source |
 | `limited_darkvision` | `range?` | Trait: capped darkvision |
 | `darkvision_immunity` | — | Trait: ignore heavy obscurement |
+| `grant_temp_hp` | `amount` | Temporary hit points, soaked before real HP. RAW: never stacks, a new grant only replaces a smaller pool |
 
 ### Common patterns
 
@@ -118,6 +119,8 @@ unless = "attacked_other_than_source_this_turn"
 | `impose_disadvantage` | The bearer's attacks have disadvantage |
 | `impose_disadvantage_except_source` | …except against the condition's source |
 | `grant_advantage_against` | *Registered, not yet wired* |
+| `grant_ac_bonus` | `amount` added to the bearer's AC (the Shield spell's +5) |
+| `grant_speed_zero` | The bearer's Speed is 0 — it still acts, it just can't move |
 
 **Expiry clocks** (`expires`):
 
@@ -128,6 +131,7 @@ unless = "attacked_other_than_source_this_turn"
 | `end_of_bearer_turn` | End of the bearer's own turn |
 | `end_of_bearer_next_turn` | Treated as above (documented simplification) |
 | `until_cured` | Never automatically |
+| `save_ends_start_of_bearer_turn` | The bearer rolls a save at the start of each of its turns; a success ends it. Requires `save_ability` + `save_dc` on the condition definition |
 | `rounds:<n>` | *Validated but not yet resolved at runtime* |
 
 `unless` keeps a condition alive past its clock; the only predicate is

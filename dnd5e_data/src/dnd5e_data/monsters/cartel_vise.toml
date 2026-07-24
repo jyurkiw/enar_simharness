@@ -1,0 +1,149 @@
+# Southern Gate Guard Cartel Vise, CR 2 — the payoff / capture piece of the
+# cartel's mutual-dependency network. Converted from the Homebrewery statblock
+# at enigma-narrative/.../southern-gate-guard-cartel/vise.md.
+#
+# Its whole design is CONDITIONAL: a Club is 5 damage against a free target, 12
+# against a Grappled or Prone one, 19 against a Restrained one. That's modeled
+# as one ability plus two mutually-exclusive `damage_rider`s rather than three
+# abilities, because the tier depends on the *chosen target's* state, and a
+# `[multiattack].when` is evaluated before targets exist (it only sees `self`).
+# The riders read the final target, which is exactly the right scope.
+#
+#   base 1d6+2                        =  5 avg   (free target)
+#   + 2d6 when Grappled/Prone         = 12 avg   (3d6+2)
+#   + 4d6 when Restrained             = 19 avg   (5d6+2)
+#
+# The tiers do not stack: the Restrained rider excludes itself from the
+# Grappled/Prone one, matching the statblock's "this attack INSTEAD deals".
+#
+# Targeting follows the payoff: a Restrained enemy first, then a Grappled/Prone
+# one, then nearest. That's the Vise doing its job in the network — the Hound
+# and Slinger set the table, the Vise eats.
+#
+# Manacle (1/Day) is the capture tool. RAW it's a DC 13 Dexterity (Sleight of
+# Hand) *check*; the engine has no skill-check primitive, so it's modeled as a
+# DC 13 Dexterity save — a close stand-in (a Dex-save-proficient PC resists a
+# little better than RAW, a non-proficient one about the same). Restrained then
+# has no escape clock: the statblock's escape DCs (20 / 25 / 15-with-tools) are
+# all well out of reach mid-fight, so "until freed" is effectively permanent
+# for the duration of the encounter, which is what `until_cured` gives.
+name = "cartel_vise"
+display_name = "Southern Gate Guard Cartel Vise"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+alignment = "Lawful Neutral"
+cr = 2
+
+[stats]
+strength = 13
+dexterity = 12
+constitution = 14
+intelligence = 10
+wisdom = 12
+charisma = 10
+ac = 13
+speed = 30
+initiative_bonus = 1
+
+[stats.health]
+average = 91
+hit_dice = "14d8+28"
+
+[stats.saves]
+strength = 3
+dexterity = 1
+constitution = 4
+intelligence = 0
+wisdom = 1
+charisma = 0
+
+[stats.senses]
+passive_perception = 11
+
+# "the target has the Restrained condition until freed" — the manacles' own
+# escape DCs (20 Sleight of Hand / 25 Athletics / 15 with thieves' tools) are
+# out of reach in a fight, so this simply doesn't come off during the encounter.
+[conditions.manacled]
+grants = [ { effect = "grant_speed_zero" } ]
+expires = "until_cured"
+ends_with_source = false
+
+[abilities.club]
+kind = "attack"
+to_hit = 3
+damage = "1d6+2"
+damage_type = "bludgeoning"
+requires_sight = false          # a mundane weapon: swingable at what you can't see
+on_hit = [
+  { effect = "damage_rider", damage = "4d6", damage_type = "bludgeoning", name = "vise_restrained", when = "has_condition(target, 'restrained')" },
+  { effect = "damage_rider", damage = "2d6", damage_type = "bludgeoning", name = "vise_held", when = "not has_condition(target, 'restrained') and (has_condition(target, 'grappled') or has_condition(target, 'prone'))" },
+]
+
+# Manacle: only worth an action against an already-held target, and only once.
+[abilities.manacle]
+kind = "save"
+ability = "dexterity"
+dc = 13
+targets = "enemies"
+max_targets = 1
+target_filter = "distance(self, target) <= 5 and not has_condition(target, 'manacled') and (has_condition(target, 'grappled') or has_condition(target, 'incapacitated') or has_condition(target, 'restrained'))"
+costs = { resource = "manacles", amount = 1 }
+on_fail = [
+  { effect = "attach_condition", condition = "restrained" },
+  { effect = "attach_condition", condition = "manacled" },
+]
+
+[resources.manacles]
+uses = 1
+per = "day"
+
+# The squad breaks when the Constable goes down (see sims/guard_cartel). The
+# Constable carries `tags = ["commander"]`; `allies_tagged` only sees the
+# living, so this option arms itself the moment it drops.
+[abilities.withdraw]
+kind = "utility"
+targets = "self"
+effects = [ { effect = "end_trial", outcome = { squad_retreated = 1 } } ]
+
+[multiattack.retreat]
+actions = ["withdraw"]
+when = "count(allies_tagged('commander')) == 0"
+priority = 100
+
+[multiattack.bind]
+actions = ["manacle"]
+when = "any(enemies, distance(self, it) <= 5 and not has_condition(it, 'manacled') and (has_condition(it, 'grappled') or has_condition(it, 'incapacitated') or has_condition(it, 'restrained')))"
+priority = 50
+
+[multiattack.standard]
+actions = ["club"]
+priority = 0
+
+# Commander's Strike hands this ability to the Vise as a reaction attack; the
+# +1d8 comes from the Constable's effect call, not from here.
+[abilities.commanded_strike]
+kind = "attack"
+to_hit = 3
+damage = "1d6+2"
+damage_type = "bludgeoning"
+requires_sight = false
+on_hit = [
+  { effect = "damage_rider", damage = "4d6", damage_type = "bludgeoning", name = "vise_restrained", when = "has_condition(target, 'restrained')" },
+  { effect = "damage_rider", damage = "2d6", damage_type = "bludgeoning", name = "vise_held", when = "not has_condition(target, 'restrained') and (has_condition(target, 'grappled') or has_condition(target, 'prone'))" },
+]
+target_filter = "distance(self, target) <= 5"
+
+[behavior]
+tactic = "engage"
+
+[[behavior.targeting]]
+when = "has_condition(target, 'restrained')"
+order = "nearest"
+priority = 30
+
+[[behavior.targeting]]
+when = "has_condition(target, 'grappled') or has_condition(target, 'prone')"
+order = "nearest"
+priority = 20

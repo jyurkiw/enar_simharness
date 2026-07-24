@@ -63,9 +63,16 @@ class Aura:
 class Battlefield:
     def __init__(self, creatures: Iterable[Creature], *, board: Board,
                  obscurement: Optional[ObscurementField] = None,
-                 auras: Optional[Iterable[Aura]] = None) -> None:
+                 auras: Optional[Iterable[Aura]] = None,
+                 condition_defs: Optional[dict] = None) -> None:
         self.creatures: dict[str, Creature] = {c.instance_name: c for c in creatures}
         self.board = board
+        # The workspace-wide `dict[str, statblock.ConditionDef]` registry
+        # `system.py` builds. Carried here so `movement.py` can fold a
+        # `grant_speed_zero` condition (the Slinger's Low Bolo) without needing
+        # its own handle on the system — every movement call already has the
+        # Battlefield.
+        self.condition_defs: dict = condition_defs if condition_defs is not None else {}
         self._grapples: dict[str, list[str]] = defaultdict(list)   # grappler -> [grappled, ...]
         self._grappled_by: dict[str, str] = {}                     # grappled -> grappler
         self.focus: dict[str, str] = {}                            # side -> enemy instance_name

@@ -59,6 +59,22 @@ uv run --project dnd5e dnd5e-sim run      sims/my_fight/simulation.toml --trials
 > A top-level key written after `[simulation]` silently becomes `simulation.board`. This
 > is the single most common authoring mistake; `validate` catches it.
 
+`[simulation]` also takes `hp_mode` (`"average"`, the default, or `"rolled"`) and
+`grapple_escape`:
+
+```toml
+[simulation]
+grapple_escape = true    # default false
+```
+
+**`grapple_escape`** turns on RAW 2024's "escaping a grapple costs your action" — a
+check against the grappler's escape DC, win or lose, taken only when another enemy has
+closed within 10 ft (a creature that breaks free unconditionally is modeling *worse*
+play than a competent table, not better — see `system._try_escape_grapple`). It's opt-in
+because switching it on globally would rewrite the numbers of every sim captured while
+grapple was an inert marker. **Turn it on for any encounter whose design keys damage off
+being held** — without it, the first successful grapple is permanent.
+
 ### Sides, spawns and counts
 
 `side` is any string; two sides is the norm (`party` / `monsters`). The trial ends when

@@ -139,7 +139,7 @@ SKIPS_TURN = frozenset({STUNNED, PARALYZED, UNCONSCIOUS, PETRIFIED})
 GRANT_EFFECTS = frozenset({
     "grant_advantage_to_attackers", "grant_advantage_against",
     "impose_disadvantage", "impose_disadvantage_except_source",
-    "grant_self_advantage", "grant_ac_bonus",
+    "grant_self_advantage", "grant_ac_bonus", "grant_speed_zero",
 })
 
 # Closed clock keywords a `[conditions.*].expires` may reference (design doc
@@ -148,7 +148,15 @@ GRANT_EFFECTS = frozenset({
 CLOCK_KEYWORDS = frozenset({
     "start_of_source_next_turn", "end_of_source_next_turn",
     "end_of_bearer_turn", "end_of_bearer_next_turn", "until_cured",
+    # "…or succeeds on a DC N <ability> saving throw at the start of each of
+    # its turns" (the Guard Cartel Slinger's bolos). The condition definition
+    # must also carry `save_ability` + `save_dc`; system.py rolls it in
+    # `_tick_start_of_turn` for whoever's turn is beginning.
+    "save_ends_start_of_bearer_turn",
 })
+
+# Clocks that need `save_ability`/`save_dc` on the condition definition.
+SAVE_ENDS_CLOCKS = frozenset({"save_ends_start_of_bearer_turn"})
 
 
 def is_known_clock(expires: str) -> bool:
@@ -188,6 +196,15 @@ def grants_for(creature: "Creature", grant_name: str, *,
         if any(g.effect == grant_name for g in cdef.grants):
             matches.append(instance)
     return matches
+
+
+def speed_is_zero(creature: "Creature", *, condition_defs: dict) -> bool:
+    """True when any condition on `creature` grants `grant_speed_zero` — the
+    Guard Cartel Slinger's Low Bolo ("the target's Speed becomes 0"). Read by
+    `movement.py` rather than by `Creature.speed_ft`, because a Creature has no
+    handle on the workspace-wide condition registry and movement always does
+    (via the Battlefield)."""
+    return bool(grants_for(creature, "grant_speed_zero", condition_defs=condition_defs))
 
 
 def ac_bonus_for(creature: "Creature", *, condition_defs: dict) -> int:

@@ -224,6 +224,17 @@ class CombatContext:
         # Full cover remains an auto-miss: there is no line to the target at all.
         cover_bonus = 0
         if not in_reach:
+            # A MELEE-ONLY weapon (no `range_normal` at all) simply cannot
+            # resolve against a target outside its reach. Without this, the
+            # "ranged" branch below applies — and with no range band to gate
+            # on, a longsword could be swung across the whole board. It only
+            # showed up once a sim put a melee creature far enough away to
+            # matter (the Guard Cartel Constable, which deliberately holds
+            # position 40 ft back to issue orders, was landing longsword hits
+            # from there); on the older 30-ft `plain_room` sims every melee
+            # monster closes in round 1, so nothing ever swung out of reach.
+            if normal_range is None:
+                return AttackOutcome(hit=False, crit=False, damage=0, target=target)
             if bf.has_full_cover(attacker, target):
                 return AttackOutcome(hit=False, crit=False, damage=0, target=target)
             if not bf.can_see(attacker, target):
@@ -263,6 +274,13 @@ class CombatContext:
         was_down = target.is_down
         self.ledger.record(attacker.instance_name, target.instance_name, action_name, amount, damage_type)
         target.damage_total += amount
+        # Temporary hit points (the Constable's Rally) soak first and are spent
+        # in the process; only the remainder reaches real HP. Recorded at full
+        # value in the ledger — the attacker did deal it.
+        if target.temp_hp:
+            absorbed = min(target.temp_hp, amount)
+            target.temp_hp -= absorbed
+            amount -= absorbed
         target.current_damage += amount
         self._sync_hp_conditions(target, was_down)
         return amount

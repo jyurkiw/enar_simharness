@@ -108,11 +108,14 @@ class Dnd5eSystem:
     def __init__(self, *, board, roster: list, max_rounds: int, hp_mode: str = "average",
                  focus: Optional[dict] = None, obscurement: tuple = (),
                  light_plan: Optional[object] = None, reinforcements: tuple = (),
-                 extraction: Optional[object] = None) -> None:
+                 extraction: Optional[object] = None, grapple_escape: bool = False) -> None:
         self.board = board
         self.roster = roster
         self.max_rounds = max_rounds
         self.hp_mode = hp_mode
+        # `[simulation] grapple_escape` — see `_try_escape_grapple`. Off by
+        # default so existing grapple sims keep their captured behavior.
+        self.grapple_escape = grapple_escape
         self.focus = dict(focus or {})
         # `[extraction]` (loader.ExtractionSpec, duck-typed): a smash-and-grab
         # objective + retreat. None for ordinary deathmatch sims.
@@ -152,7 +155,8 @@ class Dnd5eSystem:
             creature.place(*slot.start)
 
         obscurement_field, auras = self._build_obscurement()
-        battlefield = Battlefield(creatures, board=self.board, obscurement=obscurement_field, auras=auras)
+        battlefield = Battlefield(creatures, board=self.board, obscurement=obscurement_field, auras=auras,
+                                  condition_defs=self.condition_defs)
         battlefield.focus.update(self.focus)
 
         resolver = Resolver(ctx.dice)
@@ -255,12 +259,54 @@ class Dnd5eSystem:
         finally:
             self._tick_end_of_turn(actor, game, ctx.round_index)
 
+    def _try_escape_grapple(self, actor: Creature, game: GameState) -> bool:
+        """RAW 2024: escaping a grapple costs your **action** — a check against
+        the grappler's escape DC, win or lose. Returns True when the turn was
+        spent on it.
+
+        Opt-in per simulation (`[simulation] grapple_escape = true`), because
+        turning it on globally would rewrite every existing grapple sim's
+        numbers: the otyugh sims were all captured with grapple as an inert
+        marker, and the party spending actions to break free is a different
+        fight. Sims that *are* about grapple — the Guard Cartel, whose Vise
+        damage triples against a held target — need the action cost modeled or
+        the first successful Catch is permanent.
+
+        The check is d20 + the better of the Strength/Dexterity modifier +
+        proficiency, standing in for Athletics/Acrobatics (an approximation:
+        the engine has no skill-check primitive, and `[stats.skills]` is
+        carried but unused).
+
+        **The escape is a choice, not a reflex.** Trading a whole turn to shed
+        a condition whose only RAW effect is Speed 0 is usually *wrong* for a
+        melee combatant that's already standing where it wants to be — a
+        creature that escapes unconditionally is modeling worse play than a
+        competent table, not better. So it only spends the action when being
+        held actually costs it something: another enemy has closed to within 10
+        ft, which is the shape every grapple-payoff design takes (here, a Vise
+        whose club triples against a held target). Held by a lone grappler with
+        nothing else nearby, it shrugs and keeps swinging."""
+        instance = actor.condition(conditions.GRAPPLED)
+        if instance is None or instance.escape_dc is None:
+            return False
+        others = [e for e in game.battlefield.enemies_of(actor)
+                  if e.instance_name != instance.source]
+        if not any((game.battlefield.distance_ft(actor, e) or 999) <= 10 for e in others):
+            return False
+        stats = actor.statblock.stats
+        bonus = max(stats.modifier("strength"), stats.modifier("dexterity")) + stats.proficiency
+        if game.combat_ctx.resolver.roll("1d20") + bonus >= instance.escape_dc:
+            game.combat_ctx.remove_condition(actor, conditions.GRAPPLED)
+        return True
+
     def _take_turn_body(self, ctx: TrialContext, actor: Creature, game: GameState) -> None:
         if actor.is_down:
             self._roll_death_save(actor, game.combat_ctx)
             return
         if any(actor.has_condition(name) for name in conditions.SKIPS_TURN):
             return
+        if self.grapple_escape and self._try_escape_grapple(actor, game):
+            return  # breaking free cost this creature its action
         if self._maybe_produce_light(actor, game, ctx):
             return  # producing light cost this creature its action
 
@@ -321,7 +367,11 @@ class Dnd5eSystem:
 
     def finalize_trial(self, ctx: TrialContext) -> dict:
         game: GameState = ctx.game
-        outcome = {}
+        # How long the fight actually took. Cheap, always available, and the
+        # thing you reach for first when asking whether an encounter is the
+        # right size — a squad that folds in three rounds is a different
+        # encounter from one that grinds for ten, even at identical HP totals.
+        outcome = {"rounds": ctx.round_index}
         sides = {c.side for c in game.creatures.values()}
         for c in game.creatures.values():
             outcome[f"down_{c.instance_name}"] = int(c.is_down)
@@ -396,11 +446,39 @@ class Dnd5eSystem:
         """`start_of_source_next_turn` clocks (design doc 03 section 3):
         expire on whichever creature holds an instance sourced from `actor`,
         checked *before* the incapacity gates so a lifted Stunned still lets
-        its bearer act this turn."""
+        its bearer act this turn. Then `actor`'s own `save_ends_*` conditions
+        get their saving throw, and any exhausted recharge resource its roll."""
         for creature in game.creatures.values():
             for instance in list(creature.conditions):
                 if instance.expires == "start_of_source_next_turn" and instance.source == actor.instance_name:
                     self._expire_condition(creature, instance)
+        self._tick_save_ends(actor, game)
+        self._tick_recharges(actor, game)
+
+    def _tick_save_ends(self, actor: Creature, game: GameState) -> None:
+        """"…or succeeds on a DC N <ability> saving throw at the start of each
+        of its turns" — the Guard Cartel Slinger's bolos. Rolled here, before
+        the turn body, so a shaken-off Speed-0 bolo frees this turn's movement."""
+        for instance in list(actor.conditions):
+            if instance.expires not in conditions.SAVE_ENDS_CLOCKS:
+                continue
+            if instance.save_ability is None or instance.save_dc is None:
+                continue
+            if game.combat_ctx.saving_throw(actor, instance.save_ability, instance.save_dc):
+                actor.remove_condition(instance.name)
+
+    def _tick_recharges(self, actor: Creature, game: GameState) -> None:
+        """`recharge = "5-6"` on a `[resources.*]` pool: at the start of its
+        owner's turn, an exhausted pool rolls a d6 and comes back on a hit
+        (the Constable's Rally). Parsed since Phase 3 but never rolled until
+        now — a recharge resource simply stayed spent for the rest of the
+        fight."""
+        for name, resource in actor.statblock.resources.items():
+            if not resource.recharge or actor.resources.get(name, 0) > 0:
+                continue
+            low = int(str(resource.recharge).split("-")[0])
+            if game.combat_ctx.resolver.roll("1d6") >= low:
+                actor.resources[name] = resource.uses
 
     def _tick_end_of_turn(self, actor: Creature, game: GameState, round_index: int) -> None:
         """`end_of_bearer_turn`/`end_of_bearer_next_turn` (treated identically

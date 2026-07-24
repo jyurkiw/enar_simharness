@@ -66,7 +66,7 @@ def load_toml_file(path: str | Path) -> dict:
 
 
 # Effect-call arguments that name a *creature* (see effects._resolve_ref).
-_EFFECT_TARGET_KEYS = ("target", "to", "with")
+_EFFECT_TARGET_KEYS = ("target", "to", "with", "actor")
 _EFFECT_TARGET_REFS = ("self", "target")  # or "event.<field>" / "expr:<expression>"
 
 
@@ -163,8 +163,12 @@ def _validate_effect_args(call: EffectCall, *, where: str, known_conditions: fro
         require_keys(call.args, ["key"], where=where)
     elif call.effect == "make_attack":
         require_keys(call.args, ["ability"], where=where)
+        if "actor" in call.args:
+            _validate_target_ref(call.args["actor"], where=f"{where}.actor")
     elif call.effect == "spend_resource":
         require_keys(call.args, ["resource"], where=where)
+    elif call.effect == "grant_temp_hp":
+        require_keys(call.args, ["amount"], where=where)
 
 
 # Area-of-effect shapes the engine can target geometrically (aoe.py): a line
@@ -270,9 +274,17 @@ def _build_condition_def(name: str, spec: dict, *, where: str) -> ConditionDef:
     unless = spec.get("unless")
     if unless is not None:
         closed_vocab(unless, conditions_module.UNLESS_PREDICATES, where=f"{where}.unless")
+    save_ability, save_dc = spec.get("save_ability"), spec.get("save_dc")
+    if expires in conditions_module.SAVE_ENDS_CLOCKS:
+        require_keys(spec, ["save_ability", "save_dc"], where=where)
+        closed_vocab(save_ability, ABILITY_SCORE_KEYS, where=f"{where}.save_ability")
+    elif save_ability is not None or save_dc is not None:
+        raise ValueError(f"{where}: save_ability/save_dc only apply to a save-ends clock "
+                         f"({sorted(conditions_module.SAVE_ENDS_CLOCKS)}), not expires={expires!r}")
     return ConditionDef(name=name, grants=tuple(grants), exclusive=exclusive,
                         ends_with_source=spec.get("ends_with_source", True),
-                        expires=expires, unless=unless)
+                        expires=expires, unless=unless,
+                        save_ability=save_ability, save_dc=save_dc)
 
 
 def _build_reaction(name: str, spec: dict, *, where: str, known_conditions: frozenset) -> Reaction:
@@ -491,6 +503,9 @@ class SimulationSpec:
     light_plan: Optional[LightPlanSpec] = None
     reinforcements: tuple = ()            # tuple[(round_index, tuple[RosterSlot]), ...]
     extraction: Optional["ExtractionSpec"] = None
+    # `[simulation] grapple_escape`: model RAW 2024's "escaping costs your
+    # action" (system._try_escape_grapple). Opt-in — see that method for why.
+    grapple_escape: bool = False
 
 
 def _resolve_creature_path(name: str, *, sim_dir: Path, sources: list) -> Path:
@@ -659,4 +674,5 @@ def build_simulation(cfg: dict, *, sim_dir: Path, name_fallback: str,
         hp_mode=hp_mode, focus=focus, output=cfg.get("output", {}),
         obscurement=tuple(obscurement), light_plan=light_plan,
         reinforcements=tuple(reinforcements), extraction=extraction,
+        grapple_escape=bool(sim.get("grapple_escape", False)),
     )

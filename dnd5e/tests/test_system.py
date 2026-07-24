@@ -531,16 +531,23 @@ def test_marked_condition_survives_end_of_turn_if_bearer_attacked_someone_else(t
     source"]` stamped), and the `unless` predicate reads that stamp at the
     end-of-turn tick to keep the mark alive."""
     board = make_board(tmp_path)
-    bruiser_slot = RosterSlot(statblock=_bruiser_statblock(), instance_name="bruiser", side="monsters",
-                              start=(9, 1))  # far from fighterB
-    fighter_slot = RosterSlot(statblock=_swinger_statblock("fighterB"), instance_name="fighterB", side="party",
-                              start=(0, 0))
+    # The bruiser starts 2 cells out and closes to reach on its own turn — a
+    # melee weapon can't resolve against a target outside its reach (see
+    # `actions.attack`), so "far from fighterB" has to mean "one move away",
+    # not "across the board". Roster order puts the grunt first so it wins the
+    # equal-distance tie for fighterB's target (design doc 04 section 3: ties
+    # break by roster order), which is what makes fighterB swing at someone
+    # other than the mark's source.
     grunt_slot = RosterSlot(statblock=Statblock(name="grunt", display_name="grunt", classification={},
                                                 stats=make_stats()),
                             instance_name="grunt", side="monsters", start=(1, 0))  # adjacent to fighterB
-    system = Dnd5eSystem(board=board, roster=[bruiser_slot, fighter_slot, grunt_slot], max_rounds=5)
+    fighter_slot = RosterSlot(statblock=_swinger_statblock("fighterB"), instance_name="fighterB", side="party",
+                              start=(0, 0))
+    bruiser_slot = RosterSlot(statblock=_bruiser_statblock(), instance_name="bruiser", side="monsters",
+                              start=(2, 1))
+    system = Dnd5eSystem(board=board, roster=[grunt_slot, fighter_slot, bruiser_slot], max_rounds=5)
 
-    ctx = make_ctx([20, 15, 10])  # initiative: bruiser first
+    ctx = make_ctx([20, 15, 10])  # initiative: grunt, fighterB, bruiser
     system.setup_trial(ctx)
     ctx.game.combat_ctx.resolver.dice._values = [10, 2]  # brand hits fighterB
     system.take_turn(ctx, "bruiser")

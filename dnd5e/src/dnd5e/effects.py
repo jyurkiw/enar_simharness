@@ -51,6 +51,7 @@ ACTION_EFFECTS = frozenset({
     "emit_light", "limited_darkvision", "darkvision_immunity",
     "redirect_attack", "swap_positions", "damage_rider",
     "reduce_damage", "mark_turn", "make_attack", "spend_resource",
+    "grant_temp_hp",
 })
 
 ALL_EFFECTS = ACTION_EFFECTS
@@ -164,6 +165,12 @@ def _attach_condition(args: dict, scope: EffectScope) -> None:
         if instance is not None:
             instance.expires = expires
             instance.unless = unless
+            # A `save_ends_*` clock needs its save parameters on the instance:
+            # system.py's start-of-turn tick rolls them without re-looking up
+            # the definition (same rationale as expires/unless above).
+            if cdef is not None:
+                instance.save_ability = cdef.save_ability
+                instance.save_dc = cdef.save_dc
 
 
 def _remove_condition(args: dict, scope: EffectScope) -> None:
@@ -249,15 +256,68 @@ def _damage_rider(args: dict, scope: EffectScope) -> None:
 
 
 def _make_attack(args: dict, scope: EffectScope) -> None:
-    """Resolve one of the source's own abilities as a reaction — the Opportunity
-    Attack (design doc 07): `enemy_left_reach` fires, and the reactor swings its
-    named weapon at whoever is leaving. Lazily imports `actions` (which imports
-    this module) to keep the dependency one-directional at import time."""
+    """Resolve an ability as an out-of-turn attack.
+
+    Two shapes:
+
+    * **No `actor`** — the effect's *source* swings its own named ability at
+      `scope.target`. The Opportunity Attack (design doc 07): `enemy_left_reach`
+      fires, and the reactor swings at whoever is leaving.
+    * **`actor = <creature ref>`** — *someone else* attacks, picking its own
+      target with its own declarative targeting. This is the Guard Cartel
+      Constable's Commander's Strike ("that ally can use its reaction to make one
+      weapon attack against a target within its range, adding an extra 1d8
+      damage"): the ally, not the Constable, is the attacker, so its to-hit,
+      damage, reach and range all apply.
+
+    `uses_reaction = true` spends the attacker's reaction (the shared
+    `round_scratch["reaction_used"]` economy `reactions.py` uses) and refuses to
+    fire when it's already gone — RAW one Commander's Strike per ally per round.
+    `bonus_damage` is dealt as a rider on a hit, crit-aware like any other.
+
+    Lazily imports `actions`/`behavior` (which import this module) to keep the
+    dependency one-directional at import time."""
     from .actions import _resolve_attack
-    ability = scope.source.statblock.abilities.get(args["ability"])
-    if ability is None or scope.target is None or scope.target.is_down:
+
+    attacker = scope.source if "actor" not in args else _resolve_ref(args["actor"], scope)
+    if attacker is None or attacker.is_down:
         return
-    _resolve_attack(scope.ctx, scope.source, ability, scope.target)
+    ability = attacker.statblock.abilities.get(args["ability"])
+    if ability is None:
+        return
+    if args.get("uses_reaction"):
+        if attacker.round_scratch.get("reaction_used"):
+            return
+        attacker.round_scratch["reaction_used"] = True
+
+    if attacker is scope.source:
+        target = scope.target
+    else:
+        # A commanded ally picks its own victim, through its own
+        # `[[behavior.targeting]]` rules and the ability's own range gating.
+        from .behavior import BehaviorContext, select_targets
+        ctx = scope.ctx
+        behavior_ctx = BehaviorContext(battlefield=ctx.battlefield, round_index=ctx.round_index,
+                                       turn_order=ctx.turn_order, flags=ctx.flags, resolver=ctx.resolver)
+        chosen = select_targets(attacker, ability, behavior_ctx)
+        target = chosen[0] if chosen else None
+    if target is None or target.is_down:
+        return
+
+    out = _resolve_attack(scope.ctx, attacker, ability, target)
+    bonus = args.get("bonus_damage")
+    if bonus and out.hit:
+        amount = scope.ctx.roll(bonus, crit=out.crit)
+        scope.ctx.deal(attacker, out.target or target, amount,
+                       args.get("name", "commanded_strike"), ability.damage_type)
+
+
+def _grant_temp_hp(args: dict, scope: EffectScope) -> None:
+    """Temporary hit points (the Constable's Rally). RAW they never stack: a
+    new grant only replaces the current pool if it's larger."""
+    amount = scope.ctx.roll(args["amount"]) if isinstance(args["amount"], str) else int(args["amount"])
+    if amount > scope.target.temp_hp:
+        scope.target.temp_hp = amount
 
 
 def _reduce_damage(args: dict, scope: EffectScope) -> None:
@@ -293,4 +353,5 @@ _DISPATCH: dict[str, Callable[[dict, EffectScope], None]] = {
     "make_attack": _make_attack,
     "mark_turn": _mark_turn,
     "spend_resource": _spend_resource,
+    "grant_temp_hp": _grant_temp_hp,
 }

@@ -211,9 +211,10 @@ per = "encounter"               # or "day"
 recharge = "5-6"
 ```
 
-Queried by `resource_available('ki')`. **Note:** there is currently no `spend_resource`
-effect, so resources are checked but never decremented — fine when the pool outlasts the
-fight, misleading otherwise.
+Queried by `resource_available('ki')`, and debited two ways: an ability's `costs`
+(deducted once the ability actually fires) or an explicit `spend_resource` effect.
+A pool with a `recharge` code rolls a d6 at the start of its owner's turn once it's
+empty, and comes back on a hit — RAW "Recharge 5-6".
 
 ## Conditions and reactions
 

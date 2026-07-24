@@ -1,0 +1,65 @@
+# An open city plaza — the Guard Cartel squad's ground. Deliberately featureless
+# (Jeff: "the combat is in a plaza, so an empty room is fine"): no cover, no
+# difficult terrain, nothing to break line of sight. Bigger than `plain_room`,
+# which is 30 ft across and exists to stand in for the old abstract engine; a
+# plaza needs room for the Slinger's 40 ft weapon to kite in, for the Constable
+# to fall back inside its 30 ft command leash, and for the party's own ranged
+# characters to keep their distance.
+#
+# 26x18 interior. The spawn blocks are 8 cells apart at the nearest point
+# (x=6 to x=14, 40 ft), so melee closes in round 1 and the ranged pieces open
+# the fight at range — but there's open floor on both flanks and behind each
+# side, which is what makes position matter here at all. The `M` picket only
+# seats the squad's *melee*; a sim's ranged and command pieces are better
+# pinned with an explicit `start` further back (see sims/guard_cartel).
+#
+# THE MONSTER BLOCK IS A SPREAD PICKET, NOT A HUDDLE — and that is a balance
+# decision, not set dressing. Cells are handed out round-robin in roster order,
+# so a 3x3 monster block would start every guard inside one 20 ft sphere and
+# hand a level-6 evoker a free 6-target opening Fireball in every single trial.
+# Guards holding a plaza stand in a line across it, so the four `M` cells below
+# are 10 ft apart down a picket — a round-one sphere catches two of them, not
+# six. They re-cluster on their own once they charge, which is the party
+# earning the cluster rather than the spawn block gifting it.
+name = "plaza"
+
+map = """
+############################
+#..........................#
+#..........................#
+#.............M............#
+#...PPP.......M............#
+#...PPP....................#
+#...PPP.......M............#
+#..........................#
+#.............M............#
+#..........................#
+#..........................#
+#..........................#
+#..........................#
+#..........................#
+#..........................#
+#..........................#
+#..........................#
+#..........................#
+#..........................#
+############################
+"""
+
+[meta]
+cell_feet = 5
+diagonal = "chebyshev"
+
+[glyph.'#']
+terrain = "impassable"
+cover = "full"
+blocks_los = true
+blocks_light = true
+
+[glyph.'P']
+terrain = "open"
+spawn = "party"
+
+[glyph.'M']
+terrain = "open"
+spawn = "monsters"

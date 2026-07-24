@@ -55,6 +55,8 @@ Bare names (no parentheses).
 | `has_tag(who, 'tag')` | Combatant tag (from `[[combatants]].tags`) |
 | `hp(who)` / `hp_pct(who)` | HP remaining / as a fraction of max |
 | `is_bloodied(who)` / `is_down(who)` | ≤50% HP / at 0 HP |
+| `temp_hp(who)` | Temporary hit points currently on `who` |
+| `reaction_available(who)` | `who` still has its reaction this round — check before spending an action that needs *someone else's* |
 | `distance(a, b)` | Feet between two creatures |
 | `within(who, ft)` | Is `who` within `ft` of `self` |
 | `can_see(a, b)` / `in_reach(a, b)` | Line of sight / melee reach |

@@ -1,0 +1,129 @@
+# Southern Gate Guard Cartel Hound, CR 3 — the melee condition engine.
+# Converted from .../southern-gate-guard-cartel/hound.md.
+#
+# ONE attack per turn, deliberately (no Multiattack), choosing between three
+# mancatcher options. The choice depends on the target's state, so it's split
+# across three `[multiattack.*]` options whose `when` asks "is there an enemy in
+# reach in state X?" and three abilities whose `target_filter` then aims at that
+# same enemy. (A `[multiattack].when` can only see `self`, hence the `any(...)`
+# formulation; the filter is what actually picks the right victim.)
+#
+#   Catch  -> 2d6+3 and Grappled (escape DC 13)     — sets the table
+#   Trip   -> 2d6+3 and Prone, if already Grappled BY THIS HOUND
+#   Finish -> 2d8+3, +2d6 more if the target is Prone
+#
+# The chain Catch -> Trip -> Finish is the Hound's whole loop, and every step of
+# it also feeds the Vise's damage tiers. Priority order below runs the chain
+# forward: finish a Prone target, else trip a held one, else catch a fresh one.
+#
+# Reach 10 ft (the mancatcher) is `[stats].reach`, which the engine uses for
+# both melee-reach checks and the `engage` tactic's stopping distance.
+name = "cartel_hound"
+display_name = "Southern Gate Guard Cartel Hound"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+alignment = "Lawful Neutral"
+cr = 3
+
+[stats]
+strength = 17
+dexterity = 12
+constitution = 14
+intelligence = 9
+wisdom = 12
+charisma = 10
+ac = 13
+speed = 30
+reach = 10
+initiative_bonus = 1
+
+[stats.health]
+average = 110
+hit_dice = "17d8+34"
+
+[stats.saves]
+strength = 5
+dexterity = 1
+constitution = 4
+intelligence = -1
+wisdom = 1
+charisma = 0
+
+[stats.senses]
+passive_perception = 13
+
+[abilities.catch]
+kind = "attack"
+to_hit = 5
+damage = "2d6+3"
+damage_type = "bludgeoning"
+requires_sight = false
+target_filter = "not is_grappled(target)"
+on_hit = [ { effect = "attach_condition", condition = "grappled", escape_dc = 13 } ]
+
+[abilities.trip]
+kind = "attack"
+to_hit = 5
+damage = "2d6+3"
+damage_type = "bludgeoning"
+requires_sight = false
+target_filter = "is_grappled_by(target, self) and not has_condition(target, 'prone')"
+# RAW the Prone only lands "if the target has the Grappled condition from the
+# Hound" — the filter already guarantees that, so the rider is unconditional.
+on_hit = [ { effect = "attach_condition", condition = "prone" } ]
+
+[abilities.finish]
+kind = "attack"
+to_hit = 5
+damage = "2d8+3"
+damage_type = "piercing"
+requires_sight = false
+target_filter = "has_condition(target, 'prone')"
+on_hit = [ { effect = "damage_rider", damage = "2d6", damage_type = "piercing", name = "finish_prone" } ]
+
+[abilities.withdraw]
+kind = "utility"
+targets = "self"
+effects = [ { effect = "end_trial", outcome = { squad_retreated = 1 } } ]
+
+[multiattack.retreat]
+actions = ["withdraw"]
+when = "count(allies_tagged('commander')) == 0"
+priority = 100
+
+[multiattack.finish_them]
+actions = ["finish"]
+when = "any(enemies, has_condition(it, 'prone') and distance(self, it) <= 10)"
+priority = 30
+
+[multiattack.trip_them]
+actions = ["trip"]
+when = "any(enemies, is_grappled_by(it, self) and not has_condition(it, 'prone') and distance(self, it) <= 10)"
+priority = 20
+
+[multiattack.standard]
+actions = ["catch"]
+priority = 0
+
+# Commander's Strike: the Hound's commanded swing is a Finish — the option that
+# cashes in whatever state the target is already in.
+[abilities.commanded_strike]
+kind = "attack"
+to_hit = 5
+damage = "2d8+3"
+damage_type = "piercing"
+requires_sight = false
+target_filter = "distance(self, target) <= 10"
+on_hit = [ { effect = "damage_rider", damage = "2d6", damage_type = "piercing", name = "finish_prone", when = "has_condition(target, 'prone')" } ]
+
+[behavior]
+tactic = "engage"
+
+# Keep working the same body: someone already held (but not yet Prone) is one
+# Trip from being the Vises' 12-damage target.
+[[behavior.targeting]]
+when = "is_grappled_by(target, self)"
+order = "nearest"
+priority = 20

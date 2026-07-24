@@ -1,0 +1,155 @@
+# THE PLAZA GUARD SQUAD — Southern Gate Guard Cartel, Chapter 3.
+#
+#   3x Vise (CR 2) + 1x Hound (CR 3) + 1x Slinger (CR 2) + 1x Constable (CR 4)
+#   vs 5 level-6 adventurers, on an open plaza.
+#
+# BALANCE INTENTION: between LOW and MODERATE difficulty for the party.
+# The XP arithmetic already sits there — 3x450 + 700 + 450 + 1100 = 3,600 XP,
+# against the 2024 DMG's per-character budgets at level 6 (low 600, moderate
+# 1,200, high 2,400 -> 3,000 / 6,000 / 12,000 for five PCs). 3,600 is 20% of the
+# way from low to moderate. This sim exists to check whether the *network*
+# behaves like its XP tag, because the roster is built to punch above it: the
+# Hound and Slinger undershoot their damage benchmarks on purpose and pay for it
+# in control, and the Vise's damage triples off conditions the other two apply.
+#
+# HOW THE SQUAD FIGHTS
+#   Hound   : Catch (grapple) -> Trip (prone) -> Finish. Reach 10.
+#   Slinger : kites at 40 ft; stuns a target the melee can reach, roots one it
+#             can't, otherwise blinds attack rolls with High Bolos.
+#   Vises   : engage, and always swing at the most-held target available —
+#             5 damage on a free PC, 12 on a Grappled/Prone one, 19 on a
+#             Restrained one. One of them carries the 1/day Manacles.
+#   Constable: stands back inside a 30 ft leash issuing Rally and Commander's
+#             Strike while 2+ Vises/Hounds are up and nothing is in its face;
+#             otherwise advances and makes three longsword attacks. It opens
+#             with Commanding Voice (Command/Halt, DC 14).
+#
+# THE RETREAT RULE. "This guard squad will retreat from the plaza if the
+# Constable is defeated." Every mook carries a top-priority `[multiattack.
+# retreat]` gated on `count(allies_tagged('commander')) == 0` — `allies_tagged`
+# only sees the living, so the option arms itself the moment the Constable
+# drops. It resolves an `end_trial` with a `squad_retreated` outcome column, so
+# "the party broke the squad" is measured separately from "the party killed
+# every last guard". Note the granularity: the trial ends on the NEXT mook's
+# turn, not instantly, so the squad gets a partial round after its commander
+# falls. That's the right shape for a retreat anyway.
+#
+# GRAPPLE ESCAPE IS ON. `[simulation] grapple_escape = true` models RAW 2024 —
+# breaking a grapple costs your action, win or lose. This is non-negotiable for
+# THIS encounter: with grapple as an inert marker (the engine default, kept for
+# the older otyugh sims' captured numbers) the Hound's first successful Catch
+# would be permanent and every Vise would deal 12 for the rest of the fight.
+# The action cost is also the honest price — the Hound's real damage is the
+# party turns it eats, not the 2d6+3.
+name = "guard_cartel"
+description = "The plaza guard squad (3 Vise + Hound + Slinger + Constable) vs 5 level-6 adventurers"
+
+board = "lib:plaza"
+
+[simulation]
+trials = 5000
+max_rounds = 12
+seed = 20260723
+grapple_escape = true
+
+[[combatants]]
+creature = "champion_fighter_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "hunter_ranger_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "thief_rogue_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "life_cleric_l6"
+side = "party"
+spawn = "party"
+
+[[combatants]]
+creature = "evoker_wizard_l6"
+side = "party"
+spawn = "party"
+
+# Tags are load-bearing, not decoration: the Constable's Commander's Strike
+# filter and the mooks' retreat gate both read them.
+[[combatants]]
+creature = "cartel_vise"
+side = "monsters"
+spawn = "monsters"
+count = 3
+tags = ["vise"]
+
+[[combatants]]
+creature = "cartel_hound"
+side = "monsters"
+spawn = "monsters"
+tags = ["hound"]
+
+# The two back-line pieces are pinned rather than spawned: the plaza board's
+# `M` picket seats the four melee guards, and a Slinger or a Constable dropped
+# into the front rank would spend round 1 undoing it (the Slinger kiting back
+# out, the Constable falling back to its command leash). Starting them 20 ft
+# behind the line is both the fiction and one less wasted round of movement.
+[[combatants]]
+creature = "cartel_slinger"
+side = "monsters"
+start = [18, 3]
+tags = ["slinger"]
+
+[[combatants]]
+creature = "cartel_constable"
+side = "monsters"
+start = [18, 8]
+tags = ["commander"]
+
+# A second party composition, to check the answer isn't an artifact of one
+# line-up. "Standard" is the ranged-heavy adventurers (fighter/ranger/rogue/
+# cleric/wizard); "vanguard" trades the ranger and rogue for a barbarian,
+# paladin and monk — three more bodies in the front rank, which is the party
+# shape this squad's grapple-and-crush network is built to punish. Same axis
+# shape as sims/werewolf_farmhouse.
+[[sweep.axes]]
+target = "combatants"
+values = [
+  [
+    { creature = "champion_fighter_l6", side = "party", spawn = "party" },
+    { creature = "hunter_ranger_l6", side = "party", spawn = "party" },
+    { creature = "thief_rogue_l6", side = "party", spawn = "party" },
+    { creature = "life_cleric_l6", side = "party", spawn = "party" },
+    { creature = "evoker_wizard_l6", side = "party", spawn = "party" },
+    { creature = "cartel_vise", side = "monsters", spawn = "monsters", count = 3, tags = ["vise"] },
+    { creature = "cartel_hound", side = "monsters", spawn = "monsters", tags = ["hound"] },
+    { creature = "cartel_slinger", side = "monsters", start = [18, 3], tags = ["slinger"] },
+    { creature = "cartel_constable", side = "monsters", start = [18, 8], tags = ["commander"] },
+  ],
+  [
+    { creature = "berserker_barbarian_l6", side = "party", spawn = "party" },
+    { creature = "devotion_paladin_l6", side = "party", spawn = "party" },
+    { creature = "martial_arts_monk_l6", side = "party", spawn = "party" },
+    { creature = "life_cleric_l6", side = "party", spawn = "party" },
+    { creature = "evoker_wizard_l6", side = "party", spawn = "party" },
+    { creature = "cartel_vise", side = "monsters", spawn = "monsters", count = 3, tags = ["vise"] },
+    { creature = "cartel_hound", side = "monsters", spawn = "monsters", tags = ["hound"] },
+    { creature = "cartel_slinger", side = "monsters", start = [18, 3], tags = ["slinger"] },
+    { creature = "cartel_constable", side = "monsters", start = [18, 8], tags = ["commander"] },
+  ],
+]
+
+[sweep]
+columns = ["side_dealt_party", "side_dealt_monsters", "wiped_party", "wiped_monsters", "squad_retreated", "rounds"]
+# `dnd5e-sim sweep` labels each variant by its raw swept value, and a whole
+# `combatants` list renders as an unreadable wall of dict repr (same problem
+# sims/masks hit). Use `difficulty_report.py --parties` for the readable version;
+# `--dial` sweeps Vise count, and the bare script answers the difficulty
+# question the encounter was actually built to answer. FINDINGS.md has the
+# numbers and what they mean.
+
+[output]
+report = ["totals", "by_combatant", "survival"]

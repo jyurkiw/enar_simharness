@@ -1,0 +1,157 @@
+# Southern Gate Guard Cartel Slinger, CR 2 — the ranged condition engine, and
+# the network's insurance against losing the Hound early. Converted from
+# .../southern-gate-guard-cartel/slinger.md.
+#
+# Three ranged options, all 40/120, all trivial damage (4-6) — the control is
+# the point:
+#
+#   High Bolo -> Disadvantage on the target's attack rolls
+#   Low  Bolo -> the target's Speed becomes 0
+#   Stone     -> Stunned until the start of its next turn
+#
+# Both bolos end on "a DC 13 Strength saving throw at the start of each of its
+# turns", which is the `save_ends_start_of_bearer_turn` clock (added for this
+# roster). RAW they can ALSO be removed by spending an action; that route isn't
+# modeled — the party never chooses to burn an action on it here, so the bolos
+# last a little longer in-sim than at a table where a player might. Flagged
+# rather than fudged.
+#
+# The Stone's stun uses `start_of_source_next_turn` rather than a
+# bearer-clock (the engine has no `start_of_bearer_next_turn`). Checked both
+# ways round the initiative order: whether the target acts before or after the
+# Slinger, it loses exactly one turn either way, which is what RAW gives.
+# Per the designer's note, the stun is explicitly NOT for the Slinger's own
+# benefit — it has nothing else to do that turn. Its value is the Hound, Vises
+# and Constable acting into a target that can't respond.
+#
+# Option priority is the network logic: stun a target the melee can actually
+# capitalize on (someone with a cartel ally in reach), else root anyone who's
+# running, else blind-fire High Bolos at whoever's swinging.
+name = "cartel_slinger"
+display_name = "Southern Gate Guard Cartel Slinger"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+alignment = "Lawful Neutral"
+cr = 2
+
+[stats]
+strength = 10
+dexterity = 14
+constitution = 12
+intelligence = 10
+wisdom = 12
+charisma = 10
+ac = 13
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 88
+hit_dice = "16d8+16"
+
+[stats.saves]
+strength = 0
+dexterity = 4
+constitution = 1
+intelligence = 0
+wisdom = 3
+charisma = 0
+
+[stats.senses]
+passive_perception = 13
+
+[conditions.high_bolo]
+grants = [ { effect = "impose_disadvantage" } ]
+expires = "save_ends_start_of_bearer_turn"
+save_ability = "strength"
+save_dc = 13
+ends_with_source = false        # a bolo around your arms doesn't fall off when the thrower dies
+
+[conditions.low_bolo]
+grants = [ { effect = "grant_speed_zero" } ]
+expires = "save_ends_start_of_bearer_turn"
+save_ability = "strength"
+save_dc = 13
+ends_with_source = false
+
+[abilities.high_bolo]
+kind = "attack"
+to_hit = 4
+damage = "1d4+2"
+damage_type = "bludgeoning"
+range_normal = 40
+range_long = 120
+requires_sight = false
+target_filter = "not has_condition(target, 'high_bolo')"
+on_hit = [ { effect = "attach_condition", condition = "high_bolo" } ]
+
+[abilities.low_bolo]
+kind = "attack"
+to_hit = 4
+damage = "1d4+2"
+damage_type = "bludgeoning"
+range_normal = 40
+range_long = 120
+requires_sight = false
+target_filter = "not has_condition(target, 'low_bolo')"
+on_hit = [ { effect = "attach_condition", condition = "low_bolo" } ]
+
+[abilities.stone]
+kind = "attack"
+to_hit = 4
+damage = "1d6+3"
+damage_type = "bludgeoning"
+range_normal = 40
+range_long = 120
+requires_sight = false
+# Worth the shot only where an ally can act into the opening it makes.
+target_filter = "count(allies_within_of(target, 10)) > 0"
+on_hit = [ { effect = "attach_condition", condition = "stunned", expires = "start_of_source_next_turn" } ]
+
+[abilities.withdraw]
+kind = "utility"
+targets = "self"
+effects = [ { effect = "end_trial", outcome = { squad_retreated = 1 } } ]
+
+[multiattack.retreat]
+actions = ["withdraw"]
+when = "count(allies_tagged('commander')) == 0"
+priority = 100
+
+# Set up the melee: stun someone a Hound/Vise is standing next to.
+[multiattack.set_up]
+actions = ["stone"]
+when = "any(enemies, count(allies_within_of(it, 10)) > 0 and not has_condition(it, 'stunned') and distance(self, it) <= 120)"
+priority = 30
+
+# Pin a target that's out of the melee's reach — the Low Bolo's real job is
+# stopping a kiter or a fleeing PC from staying away from the Vises.
+[multiattack.pin]
+actions = ["low_bolo"]
+when = "any(enemies, count(allies_within_of(it, 10)) == 0 and not has_condition(it, 'low_bolo') and distance(self, it) <= 120)"
+priority = 20
+
+[multiattack.standard]
+actions = ["high_bolo"]
+priority = 0
+
+[abilities.commanded_strike]
+kind = "attack"
+to_hit = 4
+damage = "1d6+3"
+damage_type = "bludgeoning"
+range_normal = 40
+range_long = 120
+requires_sight = false
+
+[behavior]
+tactic = "kite"                 # a 40 ft weapon: stays back, but not off the plaza
+
+# Prefer targets the melee half of the network can already touch — that's what
+# makes the Slinger a network piece rather than a plinker.
+[[behavior.targeting]]
+when = "count(allies_within_of(target, 10)) > 0"
+order = "nearest"
+priority = 20

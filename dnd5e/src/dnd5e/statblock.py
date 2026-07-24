@@ -152,6 +152,10 @@ class ConditionDef:
     ends_with_source: bool = True
     expires: Optional[str] = None         # a clock keyword (conditions.CLOCK_KEYWORDS), or None
     unless: Optional[str] = None          # a registered predicate name (conditions.UNLESS_PREDICATES)
+    # Only for a `save_ends_*` clock (conditions.SAVE_ENDS_CLOCKS): which save
+    # the bearer rolls, against what DC, to shake the condition off.
+    save_ability: Optional[str] = None
+    save_dc: Optional[int] = None
 
 
 @dataclass(frozen=True)

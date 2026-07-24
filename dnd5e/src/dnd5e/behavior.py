@@ -168,6 +168,18 @@ class ConcreteScope:
     def is_bloodied(self, who) -> bool:
         return who.is_bloodied
 
+    def temp_hp(self, who) -> float:
+        """Temporary hit points currently on `who` (the Constable's Rally).
+        Lets a buff avoid overwriting a pool that's still up."""
+        return who.temp_hp
+
+    def reaction_available(self, who) -> bool:
+        """Whether `who` still has its reaction this round — the same
+        `round_scratch["reaction_used"]` economy `reactions.py` enforces. The
+        Constable reads this before spending an action on Commander's Strike,
+        which needs the *ally's* reaction, not its own."""
+        return not who.round_scratch.get("reaction_used")
+
     def is_down(self, who) -> bool:
         return who.is_down
 

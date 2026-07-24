@@ -199,3 +199,37 @@ extracts cleaner (33%) than the all-melee-front alternate (17%), which commits
 more bodies deep and eats more casualties on the way out. Levers to raise the
 clean rate: `cover_rounds`, party composition, and the still-deferred Paladin
 Aura of Protection (would shore up the alternate party's saves).
+
+## RE-MEASURED 2026-07-23 — the step-14 table above is superseded
+
+**The numbers above were measured while a melee weapon could be swung at a
+target outside its reach.** `actions.attack`'s out-of-reach branch treats a
+swing as ranged, and an ability with no `range_normal` has no band to gate on,
+so it never rejected the attack. Nothing had caught it because on 30-ft boards
+melee closes in round 1 — but this is a **40-long nave with 20 melee
+defenders**, which is the worst case in the workspace for it. Found and fixed
+while building `sims/guard_cartel` (whose Constable deliberately holds position
+40 ft back); see `design/07-known-issues.md` for the full write-up.
+
+Re-run, same 500 trials/party, same seed, nothing else changed:
+
+| metric | STANDARD (was) | STANDARD (now) | ALTERNATE (was) | ALTERNATE (now) |
+|---|---|---|---|---|
+| secured (box grabbed) | 94% | 92.2% | 96% | 90.6% |
+| **extracted clean** | **33%** | **64.8%** | **17%** | **49.0%** |
+| any PC down | 66% | 32.2% | 83% | 47.6% |
+| full wipe | 4% | **0.4%** | 1% | 2.0% |
+| rounds | — | 6.1 | — | 4.9 |
+| party damage dealt | — | 691 | — | 603 |
+
+The horde was landing a fifth of its damage from out of reach (monster damage
+125 -> 98 mean), so the party survives the approach far better and therefore
+deals much more (485 -> 691). **Clean extraction roughly doubles for both
+parties.** The step-14 tactical finding still holds in shape — the ranged-heavy
+standard party still extracts cleaner than the all-melee alternate — but the
+encounter is meaningfully easier than recorded: this is now a fight the intended
+smash-and-grab line wins clean about two times in three.
+
+The one number that moved *against* the party is ALTERNATE's full wipe (1% ->
+2.0%). That's consistent: an all-melee front now loses a round of output while
+crossing the nave, where before it swung the whole way in.

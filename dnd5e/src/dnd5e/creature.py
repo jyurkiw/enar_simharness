@@ -27,6 +27,11 @@ class ConditionInstance:
     escape_dc: Optional[int] = None
     expires: Optional[str] = None      # a clock keyword, copied from ConditionDef at attach time
     unless: Optional[str] = None       # a predicate name, copied from ConditionDef at attach time
+    # `save_ends_start_of_bearer_turn` clock parameters, copied from the
+    # ConditionDef at attach time (the Slinger's bolos: "...or succeeds on a
+    # DC 13 Strength saving throw at the start of each of its turns").
+    save_ability: Optional[str] = None
+    save_dc: Optional[int] = None
 
 
 @dataclass
@@ -41,6 +46,10 @@ class Creature:
     # ---- mutable per-trial state (reset by reset_state()) --------------------
     hp: int = field(default=1, init=False)
     current_damage: int = field(default=0, init=False)
+    # Temporary hit points (the Constable's Rally). A separate pool that soaks
+    # damage before `current_damage` grows; RAW they never stack — a fresh
+    # grant replaces the old one only if it's larger.
+    temp_hp: int = field(default=0, init=False)
     damage_total: int = field(default=0, init=False)
     conditions: list = field(default_factory=list, init=False)
     resources: dict = field(default_factory=dict, init=False)
@@ -136,6 +145,7 @@ class Creature:
     def reset_state(self) -> None:
         self.current_damage = 0
         self.damage_total = 0
+        self.temp_hp = 0
         self.conditions = []
         self.death_save_successes = 0
         self.death_save_failures = 0

@@ -1,0 +1,165 @@
+# Southern Gate Guard Cartel Constable, CR 4 — the squad's command piece and
+# the one member of the roster that can actually ablate HP at a normal clip.
+# Converted from .../southern-gate-guard-cartel/constable.md. Both of that
+# file's flagged overshoots (36 dmg/round vs the 27-32 CR 4 benchmark, AC 18 vs
+# 14) are carried across as written: they're confirmed-intentional, and only one
+# Constable ever appears per encounter.
+#
+# THE BEHAVIOR BRIEF (sims/guard_cartel): stand back and issue orders while
+# there are enough Vises and Hounds to benefit; advance with the longsword when
+# there aren't, or when engaged in melee. All four of those cases are
+# `[multiattack.*]` options below. Only the *movement* half — "stand back", a
+# position with no named tactic — is code, in
+# `dnd5e_behaviors.cartel_constable.ConstableBrain`; see that module's header.
+#
+# THREE THINGS THIS ROSTER TAUGHT THE ENGINE (all general, all unit-tested):
+#   * `grant_temp_hp` + temp-HP absorption in `deal` — Rally had nowhere to put
+#     its 1d8+9.
+#   * `recharge = "5-6"` actually rolling, at the start of the owner's turn. The
+#     field had been parsed since Phase 3 and never used, so a recharge resource
+#     silently stayed spent for the rest of the fight.
+#   * `make_attack`'s `actor` / `bonus_damage` / `uses_reaction` — Commander's
+#     Strike is an *ally's* attack, on the *ally's* reaction, and every previous
+#     `make_attack` caller (opportunity attacks) was the source swinging its own
+#     weapon. `uses_reaction` shares `reactions.py`'s one-per-round economy, so
+#     the Constable genuinely cannot order the same Vise twice in a round.
+#
+# ONE DELIBERATE APPROXIMATION: Commanding Voice casts *Command* limited to
+# Approach/Flee/Grovel/Halt. Modeled as the Halt option only — a DC 14 Wisdom
+# save, and on a failure the target loses its next turn (`stunned` with an
+# explicit `start_of_source_next_turn` clock, the same shape the Monk's Stunning
+# Strike uses). Approach/Flee/Grovel would each need a forced-movement or
+# forced-prone primitive that doesn't exist; Halt is both the strongest of the
+# four and the one the engine can state honestly.
+name = "cartel_constable"
+display_name = "Southern Gate Guard Cartel Constable"
+
+[classification]
+size = "Medium"
+type = "Humanoid"
+alignment = "Lawful Neutral"
+cr = 4
+
+[stats]
+strength = 17
+dexterity = 14
+constitution = 14
+intelligence = 10
+wisdom = 12
+charisma = 18
+ac = 18                         # Breastplate + Shield
+speed = 30
+initiative_bonus = 2
+
+[stats.health]
+average = 123
+hit_dice = "19d8+38"
+
+[stats.saves]
+strength = 5
+dexterity = 2
+constitution = 4
+intelligence = 0
+wisdom = 1
+charisma = 6
+
+[stats.senses]
+passive_perception = 13
+
+[abilities.longsword]
+kind = "attack"
+to_hit = 5
+damage = "2d8+3"
+damage_type = "slashing"
+requires_sight = false
+
+# Rally: 1d8+9 temp HP to an ally within 30 ft. Spent on someone who's actually
+# taking hits and doesn't already have a pool up — RAW temp HP never stack, so
+# re-rallying a full ally is a wasted action.
+[abilities.rally]
+kind = "utility"
+targets = "allies"
+max_targets = 1
+target_filter = "distance(self, target) <= 30 and temp_hp(target) == 0 and (is_bloodied(target) or count(enemies_within_of(target, 10)) > 0)"
+costs = { resource = "rally", amount = 1 }
+effects = [ { effect = "grant_temp_hp", amount = "1d8+9" } ]
+
+# Commander's Strike: the ally spends ITS reaction to make one weapon attack
+# with an extra 1d8. Each mook carries a `commanded_strike` ability — its own
+# weapon, its own to-hit, its own reach — which is what `make_attack`'s `actor`
+# form resolves. The filter is the RAW eligibility test: within 30 ft of the
+# Constable, reaction still available, and something actually in ITS range.
+[abilities.commanders_strike]
+kind = "utility"
+targets = "allies"
+max_targets = 1
+target_filter = "distance(self, target) <= 30 and reaction_available(target) and ((has_tag(target, 'vise') and count(enemies_within_of(target, 5)) > 0) or (has_tag(target, 'hound') and count(enemies_within_of(target, 10)) > 0) or (has_tag(target, 'slinger') and count(enemies_within_of(target, 40)) > 0))"
+effects = [
+  { effect = "make_attack", actor = "target", ability = "commanded_strike", bonus_damage = "1d8", name = "commanders_strike", uses_reaction = true },
+]
+
+# Commanding Voice (1/Day) — Command, Halt option. See the header note.
+[abilities.commanding_voice]
+kind = "save"
+ability = "wisdom"
+dc = 14
+target_filter = "distance(self, target) <= 60"
+costs = { resource = "commanding_voice", amount = 1 }
+on_fail = [ { effect = "attach_condition", condition = "stunned", expires = "start_of_source_next_turn" } ]
+
+[resources.rally]
+uses = 1
+recharge = "5-6"
+
+[resources.commanding_voice]
+uses = 1
+per = "day"
+
+# --- the turn table ---------------------------------------------------------
+# "Commanding" is the brief's own test, twice over: not engaged in melee
+# (nothing within 5 ft), and at least two Vises/Hounds still up to receive
+# orders. `allies_tagged` only sees the living, so losses count themselves out.
+# Both command options also require someone worth ordering — a strike at an ally
+# with no reaction left or nothing in range would simply fizzle.
+
+[multiattack.shout]
+actions = ["commanding_voice"]
+when = "any(enemies, distance(self, it) <= 60)"
+priority = 60
+
+[multiattack.command_rally]
+actions = ["rally", "commanders_strike", "commanders_strike"]
+when = "count(enemies_within(5)) == 0 and count(allies_tagged('vise')) + count(allies_tagged('hound')) >= 2 and any(allies, distance(self, it) <= 30 and reaction_available(it) and ((has_tag(it, 'vise') and count(enemies_within_of(it, 5)) > 0) or (has_tag(it, 'hound') and count(enemies_within_of(it, 10)) > 0) or (has_tag(it, 'slinger') and count(enemies_within_of(it, 40)) > 0)))"
+priority = 40
+
+[multiattack.command_orders]
+actions = ["commanders_strike", "commanders_strike", "commanders_strike"]
+when = "count(enemies_within(5)) == 0 and count(allies_tagged('vise')) + count(allies_tagged('hound')) >= 2 and any(allies, distance(self, it) <= 30 and reaction_available(it) and ((has_tag(it, 'vise') and count(enemies_within_of(it, 5)) > 0) or (has_tag(it, 'hound') and count(enemies_within_of(it, 10)) > 0) or (has_tag(it, 'slinger') and count(enemies_within_of(it, 40)) > 0)))"
+priority = 30
+
+# Commanding, but nobody is orderable yet — the usual round-2 case, with the
+# squad still crossing the plaza and nothing in anyone's reach. Without this,
+# the `fight` fallback fires and the Constable charges the front rank, which is
+# the exact opposite of the brief. It holds position and directs traffic
+# instead (the movement hook keeps it back; this ability does nothing else).
+[multiattack.direct_traffic]
+actions = ["hold_position"]
+when = "count(enemies_within(5)) == 0 and count(allies_tagged('vise')) + count(allies_tagged('hound')) >= 2 and not any(allies, distance(self, it) <= 30 and reaction_available(it) and ((has_tag(it, 'vise') and count(enemies_within_of(it, 5)) > 0) or (has_tag(it, 'hound') and count(enemies_within_of(it, 10)) > 0) or (has_tag(it, 'slinger') and count(enemies_within_of(it, 40)) > 0)))"
+priority = 20
+
+[abilities.hold_position]
+kind = "utility"
+targets = "self"
+description = "Hold the line and shout orders — no mechanical effect."
+
+# Not commanding — engaged in melee, or too few Vises/Hounds left to be worth
+# commanding. Advance and make three longsword attacks.
+[multiattack.fight]
+actions = ["longsword", "longsword", "longsword"]
+priority = 0
+
+[behavior]
+tactic = "engage"
+
+[behavior.custom]
+handler = "python:dnd5e_behaviors.cartel_constable.ConstableBrain"
