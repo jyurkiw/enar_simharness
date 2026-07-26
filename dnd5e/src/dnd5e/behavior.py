@@ -176,6 +176,11 @@ class ConcreteScope:
     def is_bloodied(self, who) -> bool:
         return who.is_bloodied
 
+    def hit_dice(self, who) -> float:
+        """Hit Dice remaining on `who` — the Pyre Weird's drain timer. Its
+        Consume finisher gates on `hit_dice(target) == 0`."""
+        return who.hit_dice_remaining
+
     def temp_hp(self, who) -> float:
         """Temporary hit points currently on `who` (the Constable's Rally).
         Lets a buff avoid overwriting a pool that's still up."""

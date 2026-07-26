@@ -1,0 +1,128 @@
+# Pyre Weird, CR 3 — the fire-dwelling elemental that hides inside a large fire,
+# grapples a victim, and drains their life force. Converted from
+# enigma-narrative/.../design/monsters/opera_house_elementals.md (a water weird
+# reskinned to fire; "pyre" as in funeral pyre).
+#
+# THE CORE LOOP IS A TIMER, NOT DAMAGE (the design doc is explicit):
+#   1. Constrict -> grapple + Restrained, and drag the victim toward fire.
+#   2. Each of the weird's turns, the captive loses 1 Hit Die and takes 2d6 fire.
+#   3. Pyre's Due — ANY creature reduced to 0 while grappled by the weird dies
+#      instantly, no death saves, no corpse (`kills_captive_at_zero`, checked in
+#      actions._sync_hp_conditions against the victim's grappler). That's the
+#      real kill mechanism; the fire damage is a side effect.
+#
+# CONSUME WAS CUT (2026-07), after three separate measurements showed it firing
+# exactly zero times. The reason is structural, not tuning: Constrict (2d6+3/turn)
+# drops a victim to 0 HIT POINTS long before the drain reaches 0 HIT DICE, so
+# Pyre's Due always triggered first. The only party it would ever have caught is
+# one that arrived having already short-rested its Hit Dice away — not worth a
+# whole extra kill switch. The DRAIN STAYS: its job is fear and attrition (it
+# still eats ~34% of the party's Hit Dice pool), not kills. A big burning
+# fire-snake is frightening enough without a second execution mechanic.
+#
+# ONE CAPTIVE AT A TIME ("The weird can grapple only one creature at a time"):
+# the `constrict` option is gated on `not is_grappling(self, ...)` via
+# `count(enemies_grappled_by_self) == 0`, the same shape as the Vise's
+# one-prisoner rule.
+name = "pyre_weird"
+display_name = "Pyre Weird"
+tags = ["weird"]
+# PYRE'S DUE — KEPT DELIBERATELY, AND NOT FOR MATHEMATICAL REASONS.
+# Measured cost of removing it: ~0.6 fewer PC deaths per run and nothing else
+# (escape rate, Hit-Dice drain and pacing are all unchanged). It is a pure
+# lethality/flavor dial. It stays because a weird's whole job is to be
+# FRIGHTENING in a specific, memorable way: a water weird drags you under and
+# drowns you; a pyre weird makes sure there is nothing left to bury — or to
+# raise. That threat is the point of the creature. Do not "optimize" it away on
+# the grounds that the damage math doesn't need it.
+kills_captive_at_zero = true     # Pyre's Due
+
+# Guttering: end its turn outside fire, without having fed, and it saves or dies
+# (system._tick_sustain). This is what makes "drag a fully-drained victim out of
+# the flames" a real counter — the design doc's own emergent note.
+[sustain]
+hazard_type = "fire"
+save_ability = "constitution"
+save_dc = 13
+
+[classification]
+size = "Large"
+type = "Elemental"
+alignment = "Chaotic Evil"
+cr = 3
+
+[stats]
+strength = 17
+dexterity = 16
+constitution = 12
+intelligence = 11
+wisdom = 10
+charisma = 10
+ac = 13
+speed = 30
+reach = 10
+initiative_bonus = 3
+# Immune to fire (it lives in the stuff — so it ignores the fire hazard field
+# too), vulnerable to cold, and un-grappleable/un-proneable like any elemental.
+immunities = ["fire", "poison"]
+vulnerabilities = ["cold"]
+condition_immunities = ["exhaustion", "grappled", "paralyzed", "petrified",
+                        "poisoned", "prone", "restrained", "unconscious"]
+
+[stats.health]
+average = 65
+hit_dice = "10d10+10"
+
+[stats.senses]
+darkvision = 60
+passive_perception = 10
+
+# Constrict: 2d6+3 fire, grapple (escape DC 13) + Restrained. The Restrained is
+# attached alongside the grapple so the Vise-style "held" state reads correctly
+# and the captive's own attacks suffer for it.
+[abilities.constrict]
+kind = "attack"
+to_hit = 5
+damage = "2d6+3"
+damage_type = "fire"
+requires_sight = false
+# Never grabs a fire-immune target ("one creature that isn't immune to Fire
+# damage") — modeled as: don't re-grab someone already held.
+target_filter = "not is_grappled_by(target, self)"
+on_hit = [
+  { effect = "attach_condition", condition = "grappled", escape_dc = 13 },
+  { effect = "attach_condition", condition = "restrained" },
+]
+
+# The per-turn drain, resolved as the weird's own action against its captive:
+# 1 Hit Die + 2d6 fire. `enemies_grappled_by_self` is the captive pool.
+[abilities.drain]
+kind = "save"
+ability = "constitution"
+dc = 13
+damage = "2d6"
+damage_type = "fire"
+half_on_save = false            # the drain damage is automatic — see on_success
+targets = "enemies_grappled_by_self"
+max_targets = 1
+on_fail = [ { effect = "drain_hit_die", amount = 1 } ]
+on_success = [ { effect = "drain_hit_die", amount = 1 } ]
+
+[multiattack.drain_captive]
+actions = ["drain"]
+when = "count(enemies_grappled_by_self) > 0"
+priority = 20
+
+[multiattack.grab]
+actions = ["constrict"]
+priority = 0
+
+[behavior]
+tactic = "engage"
+
+# Guttering + drag-to-fire. The declarative rules can't express "move to the
+# nearest fire region" (hazards aren't creatures, and there's no
+# nearest-hazard-cell primitive), so movement is a hook — structurally the same
+# escape hatch as shadow_otyugh's flee-to-darkness, inverted to seek fire.
+[behavior.custom]
+handler = "python:dnd5e_behaviors.pyre_weird.PyreWeirdBrain"

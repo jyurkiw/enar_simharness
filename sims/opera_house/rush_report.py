@@ -33,6 +33,9 @@ HERE = Path(__file__).parent
 SIMULATION = HERE / "simulation.toml"
 
 # Guard-applied conditions worth tracking on the PCs, label -> condition name.
+# Environmental (elemental) damage tags — always LETHAL, unlike guard clubs.
+FIRE_TAGS = {"fire", "debris", "enflame"}
+
 CONTROL = [
     ("grappled (Hound)", "grappled"),
     ("prone (Hound)", "prone"),
@@ -44,6 +47,21 @@ CONTROL = [
 ]
 
 REC: dict[int, dict] = defaultdict(lambda: {"cond": set(), "melee": False})
+TAGS: dict = {}
+
+
+def install_tag_probe(party_names):
+    """Damage dealt TO the PCs, by tag — the fire columns."""
+    from simharness.ledger import Ledger
+    orig = Ledger.record
+    party = set(party_names)
+
+    def record(self, source, target, tag, amount, kind=None):
+        if amount > 0 and target in party:
+            TAGS[tag] = TAGS.get(tag, 0) + amount
+        return orig(self, source, target, tag, amount, kind)
+
+    Ledger.record = record
 
 
 def install_probe(party_names, bf_melee_ft=5):
@@ -98,6 +116,8 @@ def main() -> None:
         g = ctx.game
         pcs = [g.creatures[p] for p in party_names if p in g.creatures]
         END[ctx.trial_index] = {
+            "guards_down": sum(1 for c in g.battlefield.members("monsters") if c.is_down),
+            "guards_total": len(g.battlefield.members("monsters")),
             "conscious": sum(1 for p in pcs if not p.is_down),
             "ko_stable": sum(1 for p in pcs if p.is_down and p.is_stabilized and not p.is_dead),
             "dying": sum(1 for p in pcs if p.is_down and not p.is_stabilized and not p.is_dead),
@@ -106,12 +126,16 @@ def main() -> None:
         }
 
     install_probe(party_names)
-    REC.clear()
+    install_tag_probe(party_names)
+    REC.clear(); TAGS.clear()
     system = Dnd5eSystem(board=spec.board, roster=spec.roster, max_rounds=spec.max_rounds,
                          hp_mode=spec.hp_mode, focus=spec.focus, obscurement=spec.obscurement,
                          light_plan=spec.light_plan, reinforcements=spec.reinforcements,
                          extraction=spec.extraction, grapple_escape=spec.grapple_escape,
-                         objective=spec.objective, subduing_side=spec.subduing_side)
+                         objective=spec.objective, subduing_side=spec.subduing_side,
+                         hazard_actors=spec.hazard_actors,
+                         hit_dice_spent=spec.hit_dice_spent, wake_up=spec.wake_up,
+                         initial_hazards=spec.initial_hazards)
     runner = TrialRunner(system, seed=spec.seed, max_rounds=spec.max_rounds, names=names,
                          side_of=side_of, on_trial_end=snapshot)
     rows = runner.run(trials=args.trials).rows
@@ -146,6 +170,18 @@ def main() -> None:
     t3.add_row("mean PCs manacled at end", f"{statistics.mean(e['manacled'] for e in ends):.2f}")
     t3.add_row("mean PCs dead at end", f"{statistics.mean(e['dead'] for e in ends):.2f}")
     console.print(t3)
+
+    t4 = Table(title="The fire (P5): does it kill PCs, and what does it do to the guards?")
+    t4.add_column("measure"); t4.add_column("value", justify="right")
+    fire_dealt = sum(v for k, v in TAGS.items() if k in FIRE_TAGS) / n
+    t4.add_row("elemental damage to PCs per trial (fire/debris/enflame)", f"{fire_dealt:.1f}")
+    for tag in sorted(FIRE_TAGS):
+        if TAGS.get(tag):
+            t4.add_row(f"   {tag}", f"{TAGS[tag] / n:.1f}")
+    t4.add_row("guards down at end (mean / total)",
+               f"{statistics.mean(e['guards_down'] for e in ends):.1f} / "
+               f"{statistics.mean(e['guards_total'] for e in ends):.0f}")
+    console.print(t4)
 
     t2 = Table(title="Did the guards' control land on the runners? (≥1 PC affected, per trial)")
     t2.add_column("condition"); t2.add_column("of trials", justify="right")

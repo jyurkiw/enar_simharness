@@ -55,10 +55,16 @@ class Ledger:
         taken: dict[str, float] = defaultdict(float)
         # Seed every known side at 0 so a shut-out trial still emits a uniform row.
         side_dealt: dict[str, float] = {self.side_of(n): 0.0 for n in self.names}
+        known = set(self.names)
         for (source, target, _tag), amount in self._trial.items():
             dealt[source] += amount
             taken[target] += amount
-            side_dealt[self.side_of(source)] += amount
+            # A source not in `names` is an environmental effect (fire, a trap) —
+            # it belongs to no combatant side, so it's still counted as damage
+            # dealt/taken but skipped from the per-side rollup rather than
+            # crashing on an unknown side.
+            if source in known:
+                side_dealt[self.side_of(source)] += amount
 
         row: dict = {}
         for name in self.names:

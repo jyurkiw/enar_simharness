@@ -36,7 +36,9 @@ def _build_system_and_runner(spec, *, seed=None, trials=None):
                          obscurement=spec.obscurement, light_plan=spec.light_plan,
                          reinforcements=spec.reinforcements, extraction=spec.extraction,
                          grapple_escape=spec.grapple_escape, objective=spec.objective,
-                         subduing_side=spec.subduing_side)
+                         subduing_side=spec.subduing_side, hazard_actors=spec.hazard_actors,
+                         hit_dice_spent=spec.hit_dice_spent, wake_up=spec.wake_up,
+                         initial_hazards=spec.initial_hazards)
     names = [slot.instance_name for slot in spec.roster]
     side_of = {slot.instance_name: slot.side for slot in spec.roster}
     # Reinforcement arrivals must be known to the ledger (side attribution) even

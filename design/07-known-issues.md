@@ -312,6 +312,46 @@ that turn rather than swinging anyway. `plain_room` sims are *mostly* unaffected
 spawn blocks are two cells deep, so a back-rank melee combatant starts 40 ft from the far
 rank and can no longer swing on round 1.
 
+## Grapple never held anyone — fixed, small blast radius (2026-07)
+
+**The bug:** `movement.speed_ft` consulted only the custom `grant_speed_zero`
+grant, never the RAW `grappled`/`restrained` conditions — both of which set Speed
+to 0. So **a grappled creature could simply walk out of the grapple.** Found
+while building the Pyre Weird (sims/opera_house_escape), whose drain/finisher
+chain never landed because victims strolled away before its next turn.
+
+**Blast radius, measured A/B at 250 trials/sim** (same seed, fix off vs on):
+
+| sim | monster dmg | party dmg | party wipe |
+|---|---|---|---|
+| guard_cartel | 115.9 -> 115.6 (-0.2%) | 620.8 -> 621.7 | 2.0% -> 0.8% |
+| otyugh_cr5_dps | 19.9 -> 18.0 (-9.7%) | 111.8 -> 111.9 | 0% -> 0% |
+| otyugh_cr5_x2 | 58.8 -> 54.8 (-6.7%) | 201.0 -> 209.9 (+4.4%) | 0% -> 0% |
+| otyugh_shadow_pair | 44.8 -> 41.6 (-7.2%) | 147.2 -> 149.7 | 0% -> 0% |
+| otyugh_shadow_board | 12.3 -> 11.8 (-4.7%) | 108.5 -> 110.1 | 0% -> 0% |
+| otyugh_shadow_solo | 18.1 -> 17.7 (-2.2%) | 112.5 -> 113.6 | 0% -> 0% |
+| cathedral (control, no grapplers) | **0.0%** | **0.0%** | unchanged |
+| masks (control, no grapplers) | **0.0%** | **0.0%** | unchanged |
+
+**No sim's conclusions change.** Every delta is <=10%, all in one direction:
+monsters slightly weaker, party slightly stronger.
+
+**Why holding a creature makes the MONSTER worse — the second-order effect.**
+A pinned PC stops **kiting**. The otyugh family's documented signature is the
+ranger holding the far corner at longbow range (see Bug C and the parity note at
+the top of this doc); grappled at Speed 0 it can no longer reposition, so it
+stands and shoots instead of spending movement. Party damage rises, the otyugh
+dies sooner, and it gets fewer turns — the monster-damage drop is downstream of
+the party fighting *more efficiently*, not of the grapple being weaker.
+
+**`guard_cartel` barely moved** despite the Hound being a dedicated grappler,
+because that sim already sets `grapple_escape = true`: its PCs were spending
+actions breaking free rather than walking away, so the bug had little room to
+express itself. Its published findings stand unchanged.
+
+The two zero-delta controls confirm the change is isolated to grapple sims and
+that trials remain deterministic.
+
 ## Backlog status
 
 Everything originally listed here is now closed. Bugs A, B and C were real defects and

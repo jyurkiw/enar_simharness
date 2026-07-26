@@ -35,6 +35,7 @@ from dnd_board import Board, ObscurementField, Region
 from . import conditions as _conditions
 from . import vision as _vision
 from .creature import Creature
+from .hazards import HazardField
 
 # A creature with `limited_darkvision` set can see *into* heavy obscurement up
 # to this range (but not past it), instead of being fully blocked — matching
@@ -79,6 +80,9 @@ class Battlefield:
         self.focus: dict[str, str] = {}                            # side -> enemy instance_name
         self.obscurement = obscurement
         self.auras: list[Aura] = list(auras) if auras else []
+        # Persistent damaging regions — the fire field (see hazards.py). Fresh
+        # (empty) per trial; a sim or the Pyre Elemental driver fills it.
+        self.hazards = HazardField(board)
         # Obscurement regions that don't move (the scenario's static
         # `[[environment.obscurement]]` entries without `follows`);
         # creature-bound auras are layered on top of these each round by

@@ -169,6 +169,12 @@ def _validate_effect_args(call: EffectCall, *, where: str, known_conditions: fro
         require_keys(call.args, ["resource"], where=where)
     elif call.effect == "grant_temp_hp":
         require_keys(call.args, ["amount"], where=where)
+    elif call.effect == "create_hazard":
+        require_keys(call.args, ["radius", "damage"], where=where)
+    elif call.effect == "drain_hit_die":
+        pass   # `amount` optional (default 1)
+    elif call.effect == "instant_death":
+        pass   # no arguments
 
 
 # Area-of-effect shapes the engine can target geometrically (aoe.py): a line
@@ -252,6 +258,18 @@ def _build_targeting_rule(spec: dict, *, where: str) -> TargetingRule:
     order = spec.get("order", "nearest")
     closed_vocab(order, TARGETING_ORDERS, where=f"{where}.order")
     return TargetingRule(when=when, priority=spec.get("priority", 0), order=order)
+
+
+def _build_sustain(spec, *, where: str):
+    """`[sustain]` — the Guttering upkeep (see `Statblock.sustain`)."""
+    if spec is None or spec.get("disabled"):
+        # `disabled = true` lets a SIM switch off a creature's upkeep via an
+        # override (the escape phase's smoke frees the weirds from Guttering)
+        # without needing to null out a table, which TOML merging can't express.
+        return None
+    require_keys(spec, ["hazard_type", "save_ability", "save_dc"], where=where)
+    closed_vocab(spec["save_ability"], ABILITY_SCORE_KEYS, where=f"{where}.save_ability")
+    return dict(spec)
 
 
 def _build_condition_def(name: str, spec: dict, *, where: str) -> ConditionDef:
@@ -349,6 +367,11 @@ def _build_stats(cfg: dict, *, where: str) -> Stats:
         hit_dice=health.get("hit_dice"), hp_average=health.get("average", 1),
         saves=dict(stats.get("saves", {})), skills=dict(stats.get("skills", {})),
         darkvision=senses.get("darkvision", 0), passive_perception=senses.get("passive_perception", 10),
+        resistances=frozenset(stats.get("resistances", ())),
+        vulnerabilities=frozenset(stats.get("vulnerabilities", ())),
+        immunities=frozenset(stats.get("immunities", ())),
+        condition_immunities=frozenset(stats.get("condition_immunities", ())),
+        ignores_difficult_terrain=bool(stats.get("ignores_difficult_terrain", False)),
     )
 
 
@@ -413,6 +436,8 @@ def build_statblock(cfg: dict, *, source: str) -> Statblock:
         classification=dict(cfg.get("classification", {})),
         stats=stats,
         tags=tuple(cfg.get("tags", ())),
+        kills_captive_at_zero=bool(cfg.get("kills_captive_at_zero", False)),
+        sustain=_build_sustain(cfg.get("sustain"), where=f"{source} [sustain]"),
         engaged_by=tuple(cfg.get("engaged_by", ())),
         abilities=abilities,
         multiattack=multiattack,
@@ -490,6 +515,52 @@ class ExtractionSpec:
 
 
 @dataclass(frozen=True)
+class WakeUpSpec:
+    """`[wake_up]` — a scenario that STARTS with a side beaten and bound (the
+    opera house's phase 2: "PCs reduced to 0 hit points will wake up with 1 hit
+    point, bound in manacles. Upon waking PCs may spend up to half of their hit
+    dice to heal").
+
+    At trial setup every member of `side` is set to `hp`, heals `heal_hit_dice`
+    Hit Dice worth (1d8 + CON each, spending them from the pool the Pyre Weird
+    later drains), and the first `bound_count` of them get `bound_condition`.
+
+    Escaping is then an ACTION: a bound creature spends its turn either
+    auto-freeing (`has_key` — the party took Martinique's advice and brought a
+    manacle key) or attempting `escape_dc`. A *free* member adjacent to a bound
+    ally can spend its action freeing them instead, which is the encounter's
+    intended out."""
+
+    side: str = "party"
+    hp: int = 1
+    heal_hit_dice: int = 0
+    bound_condition: Optional[str] = None
+    bound_count: int = 0
+    escape_dc: int = 20
+    has_key: bool = False
+    free_ally_range: int = 5
+
+
+@dataclass(frozen=True)
+class HazardActorSpec:
+    """`[[hazard_actors]]` — an environmental force with an initiative slot but
+    no body: no HP, no AC, untargetable, unkillable (the Pyre Elemental IS the
+    burning building). It is NOT a `Creature` and never joins a side's roster, so
+    it can't be attacked, can't be wiped, and doesn't keep a side alive.
+
+    `handler` is a `python:module.Class` driver (see
+    `dnd5e_behaviors/pyre_elemental.py`) with `take_turn(view)` and an optional
+    `legendary(view, after)` called after each other creature's turn.
+    `initiative` places it in the order; `start_round` is when it wakes up."""
+
+    name: str
+    handler: str
+    initiative: int = 12
+    start_round: int = 1
+    config: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ObjectiveSpec:
     """`[objective]` (a reach-a-zone goal, the dual of `[extraction]`'s
     destroy-a-creature goal): the `party_side` pushes NORTH toward the stage and
@@ -500,6 +571,11 @@ class ObjectiveSpec:
     runners before they break through."""
 
     reach_y: int
+    direction: str = "north"      # "north" = arrive at y <= reach_y; "south" = y >= reach_y
+    # False: the trial ends the instant ANYONE arrives ("you reached Nico").
+    # True: arrivals leave the board and the trial runs until every survivor is
+    # out or down — the right shape for "can we all get out?" (phase 2).
+    require_all: bool = False
     party_side: str = "party"
 
 
@@ -519,12 +595,19 @@ class SimulationSpec:
     reinforcements: tuple = ()            # tuple[(round_index, tuple[RosterSlot]), ...]
     extraction: Optional["ExtractionSpec"] = None
     objective: Optional["ObjectiveSpec"] = None
+    hazard_actors: tuple = ()             # tuple[HazardActorSpec, ...]
+    wake_up: Optional["WakeUpSpec"] = None
+    # `[[initial_hazards]]` — fires already burning when the trial opens (the
+    # opera house is well alight by phase 2). Raw dicts; system seeds them.
+    initial_hazards: tuple = ()
     # `[simulation] grapple_escape`: model RAW 2024's "escaping costs your
     # action" (system._try_escape_grapple). Opt-in — see that method for why.
     grapple_escape: bool = False
     # `[simulation] subduing_side`: a side that knocks foes out cold (stable)
     # rather than killing (CombatContext). None = ordinary lethal combat.
     subduing_side: Optional[str] = None
+    # `[simulation] hit_dice_spent`: start leveled creatures this many HD down.
+    hit_dice_spent: int = 0
 
 
 def _resolve_creature_path(name: str, *, sim_dir: Path, sources: list) -> Path:
@@ -594,8 +677,16 @@ def build_simulation(cfg: dict, *, sim_dir: Path, name_fallback: str,
 
         creature_path = _resolve_creature_path(creature_name, sim_dir=sim_dir, sources=sources)
 
+        explicit_name = entry.get("name")
         for i in range(count):
-            instance_name = creature_name if count == 1 else f"{creature_name}_{i + 1}"
+            # `name` gives an entry its own instance name — needed when two
+            # separate [[combatants]] entries use the SAME creature at different
+            # explicit positions (two Pyre Weirds down the aisle), which would
+            # otherwise collide on the bare creature name.
+            if explicit_name:
+                instance_name = explicit_name if count == 1 else f"{explicit_name}_{i + 1}"
+            else:
+                instance_name = creature_name if count == 1 else f"{creature_name}_{i + 1}"
             # Per-instance override wins wholesale over a base-name override
             # (not merged) — design doc 01 section 3.1.
             entry_overrides = overrides_by_name.get(instance_name, overrides_by_name.get(creature_name))
@@ -687,12 +778,45 @@ def build_simulation(cfg: dict, *, sim_dir: Path, name_fallback: str,
                                     cover_rounds=ex.get("cover_rounds", 1),
                                     party_side=ex.get("party_side", "party"))
 
+    hazard_actors = []
+    for i, spec in enumerate(cfg.get("hazard_actors", [])):
+        where = f"{path} [[hazard_actors]][{i}]"
+        require_keys(spec, ["name", "handler"], where=where)
+        if not spec["handler"].startswith("python:"):
+            raise ValueError(f"{where}.handler: must start with 'python:', got {spec['handler']!r}")
+        hazard_actors.append(HazardActorSpec(
+            name=spec["name"], handler=spec["handler"],
+            initiative=spec.get("initiative", 12), start_round=spec.get("start_round", 1),
+            config={k: v for k, v in spec.items()
+                    if k not in ("name", "handler", "initiative", "start_round")},
+        ))
+
     objective = None
     if "objective" in cfg:
         ob = cfg["objective"]
         require_keys(ob, ["reach_y"], where=f"{path} [objective]")
-        objective = ObjectiveSpec(reach_y=int(ob["reach_y"]),
+        direction = ob.get("direction", "north")
+        closed_vocab(direction, ("north", "south"), where=f"{path} [objective].direction")
+        objective = ObjectiveSpec(reach_y=int(ob["reach_y"]), direction=direction,
+                                  require_all=bool(ob.get("require_all", False)),
                                   party_side=ob.get("party_side", "party"))
+
+    initial_hazards = []
+    for i, h in enumerate(cfg.get("initial_hazards", [])):
+        where = f"{path} [[initial_hazards]][{i}]"
+        require_keys(h, ["center", "radius", "damage"], where=where)
+        initial_hazards.append(dict(h))
+
+    wake_up = None
+    if "wake_up" in cfg:
+        w = cfg["wake_up"]
+        wake_up = WakeUpSpec(
+            side=w.get("side", "party"), hp=int(w.get("hp", 1)),
+            heal_hit_dice=int(w.get("heal_hit_dice", 0)),
+            bound_condition=w.get("bound_condition"), bound_count=int(w.get("bound_count", 0)),
+            escape_dc=int(w.get("escape_dc", 20)), has_key=bool(w.get("has_key", False)),
+            free_ally_range=int(w.get("free_ally_range", 5)),
+        )
 
     return SimulationSpec(
         name=cfg.get("name", name_fallback), board=board, roster=roster,
@@ -702,4 +826,7 @@ def build_simulation(cfg: dict, *, sim_dir: Path, name_fallback: str,
         reinforcements=tuple(reinforcements), extraction=extraction, objective=objective,
         grapple_escape=bool(sim.get("grapple_escape", False)),
         subduing_side=sim.get("subduing_side"),
+        hazard_actors=tuple(hazard_actors), wake_up=wake_up,
+        initial_hazards=tuple(initial_hazards),
+        hit_dice_spent=int(sim.get("hit_dice_spent", 0)),
     )

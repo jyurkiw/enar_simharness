@@ -21,6 +21,15 @@ from .creature import Creature
 PHASE3_TACTICS = ("engage", "kite", "hold")
 
 
+def _cost_grid(board, actor: Creature):
+    """Movement-cost grid for this actor. A flier (or anything with freedom of
+    movement) ignores difficult terrain, so every passable cell costs 1."""
+    grid = board.move_cost_grid()
+    if actor.statblock.stats.ignores_difficult_terrain:
+        grid = (grid > 0).astype(grid.dtype)
+    return grid
+
+
 def speed_ft(actor: Creature, battlefield: Battlefield) -> int:
     """The actor's speed for *this* move, after conditions. A condition
     granting `grant_speed_zero` (the Guard Cartel Slinger's Low Bolo, "the
@@ -28,6 +37,14 @@ def speed_ft(actor: Creature, battlefield: Battlefield) -> int:
     can't go anywhere. Every movement function in this module goes through
     here rather than reading `Creature.speed_ft` directly."""
     if _conditions.speed_is_zero(actor, condition_defs=battlefield.condition_defs):
+        return 0
+    # RAW: Grappled and Restrained both set Speed to 0. This was missing — a
+    # grappled creature could simply walk out of the grapple, which made every
+    # grapple in the workspace an inert marker for movement. It is the reason
+    # the Pyre Weird's drain/Consume chain never landed: victims strolled away
+    # before the weird's next turn (see sims/opera_house_escape FINDINGS).
+    if (actor.has_condition(_conditions.GRAPPLED)
+            or actor.has_condition(_conditions.RESTRAINED)):
         return 0
     return actor.speed_ft
 
@@ -66,7 +83,7 @@ def move_to_cell(actor: Creature, dest: Optional[tuple[int, int]], battlefield: 
     if len(route) <= 1:
         return
     budget = board.feet_to_cells(speed_ft(actor, battlefield))
-    cost = board.move_cost_grid()
+    cost = _cost_grid(board, actor)
     for (ox, oy) in occ:
         cost[oy, ox] = 0
     spent = 0
@@ -131,7 +148,7 @@ def _move_toward(actor: Creature, target: Creature, battlefield: Battlefield, *,
     if len(route) <= 1:
         return actor.coord
     budget = board.feet_to_cells(speed_ft(actor, battlefield))
-    cost = board.move_cost_grid()
+    cost = _cost_grid(board, actor)
     for (ox, oy) in occ:
         cost[oy, ox] = 0
     spent = 0
@@ -162,7 +179,7 @@ def _advance_to_los(actor: Creature, target: Creature, battlefield: Battlefield,
     if len(route) <= 1:
         return
     budget = board.feet_to_cells(speed_ft(actor, battlefield))
-    cost = board.move_cost_grid()
+    cost = _cost_grid(board, actor)
     for (ox, oy) in occ:
         cost[oy, ox] = 0
     spent = 0

@@ -276,8 +276,24 @@ class CombatContext:
                                   advantage=advantage, disadvantage=disadvantage,
                                   bonus_dice=bonus_dice, penalty_dice=penalty_dice)
 
+    @staticmethod
+    def _apply_damage_type(target: Creature, amount: int, damage_type: Optional[str]) -> int:
+        """Scale by the target's defenses (P1): immunity → 0, vulnerability → ×2,
+        resistance → ½ (rounded down, RAW). Untyped damage is unaffected."""
+        if damage_type is None or amount <= 0:
+            return amount
+        s = target.statblock.stats
+        if damage_type in s.immunities:
+            return 0
+        if damage_type in s.vulnerabilities:
+            amount *= 2
+        if damage_type in s.resistances:
+            amount //= 2
+        return amount
+
     def deal(self, attacker: Creature, target: Creature, amount: int, action_name: str,
              damage_type: Optional[str] = None) -> int:
+        amount = self._apply_damage_type(target, amount, damage_type)
         if amount <= 0:
             return 0
         was_down = target.is_down
@@ -296,6 +312,29 @@ class CombatContext:
         self._sync_hp_conditions(target, was_down, nonlethal=nonlethal)
         return amount
 
+    def environmental_damage(self, target: Creature, amount: int, *, tag: str = "fire",
+                             damage_type: Optional[str] = None) -> int:
+        """Damage with NO attacker — fire, falling debris, a spike pit. Always
+        lethal: `subduing_side` only spares a foe from a killer that *chose* to
+        subdue (a guard's club), and a hazard chooses nothing. Recorded under a
+        synthetic source name (`tag`) so it lands in the ledger's `taken_<x>`
+        column; the ledger skips it from the per-side `dealt` rollup because it
+        isn't a combatant (see Ledger.finalize_trial). No-op on a downed target
+        — the burning-building design leaves the unconscious to wake, not burn
+        (sims/opera_house PLAN)."""
+        amount = self._apply_damage_type(target, amount, damage_type)
+        if amount <= 0 or target.is_down:
+            return 0
+        self.ledger.record(tag, target.instance_name, tag, amount, damage_type)
+        target.damage_total += amount
+        if target.temp_hp:
+            absorbed = min(target.temp_hp, amount)
+            target.temp_hp -= absorbed
+            amount -= absorbed
+        target.current_damage += amount
+        self._sync_hp_conditions(target, was_down=False, nonlethal=False)
+        return amount
+
     def heal(self, target: Creature, amount: int) -> int:
         if amount <= 0:
             return 0
@@ -305,8 +344,33 @@ class CombatContext:
         self._sync_hp_conditions(target, was_down)
         return healed
 
+    def _captor_kills_at_zero(self, target: Creature) -> bool:
+        """Pyre's Due: is `target` held by a grappler that kills its captive on
+        reaching 0 HP? Overrides a subduing knockout — the fire doesn't care
+        that the guard meant to be merciful."""
+        captor_name = self.battlefield.grappled_by(target.instance_name)
+        captor = self.battlefield.creatures.get(captor_name) if captor_name else None
+        return captor is not None and captor.statblock.kills_captive_at_zero
+
     def _sync_hp_conditions(self, target: Creature, was_down: bool, *, nonlethal: bool = False) -> None:
         if target.is_down:
+            if not was_down and self._captor_kills_at_zero(target):
+                # Consumed by the pyre: dead outright, no saves, no corpse. The
+                # captor lets the ash go (release the victim FROM its grappler),
+                # and anyone the victim was itself holding goes free too.
+                target.death_save_successes = 0
+                target.death_save_failures = 3
+                captor = self.battlefield.grappled_by(target.instance_name)
+                if captor:
+                    self.battlefield.release(captor, target.instance_name)
+                target.remove_condition(conditions.GRAPPLED)
+                target.remove_condition(conditions.RESTRAINED)
+                for freed_name in self.battlefield.grabbed_targets(target.instance_name):
+                    freed = self.battlefield.creatures.get(freed_name)
+                    if freed is not None:
+                        freed.remove_condition(conditions.GRAPPLED)
+                self.battlefield.release(target.instance_name)
+                return
             if not was_down:
                 if nonlethal:
                     # Subdued: knocked out cold but STABLE (death_save_successes
@@ -341,6 +405,10 @@ class CombatContext:
 
     def apply_condition(self, target: Creature, condition: str, *, source: Optional[Creature] = None,
                         escape_dc: Optional[int] = None) -> None:
+        # Condition immunity (P1): an immune creature never receives it — the
+        # Pyre Weird can't be grappled/knocked prone/etc.
+        if condition in target.statblock.stats.condition_immunities:
+            return
         if condition == conditions.GRAPPLED and source is not None:
             self.battlefield.grapple(source.instance_name, target.instance_name)
         target.add_condition(ConditionInstance(

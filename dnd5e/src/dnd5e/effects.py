@@ -51,7 +51,7 @@ ACTION_EFFECTS = frozenset({
     "emit_light", "limited_darkvision", "darkvision_immunity",
     "redirect_attack", "swap_positions", "damage_rider",
     "reduce_damage", "mark_turn", "make_attack", "spend_resource",
-    "grant_temp_hp",
+    "grant_temp_hp", "create_hazard", "drain_hit_die", "instant_death",
 })
 
 ALL_EFFECTS = ACTION_EFFECTS
@@ -312,6 +312,53 @@ def _make_attack(args: dict, scope: EffectScope) -> None:
                        args.get("name", "commanded_strike"), ability.damage_type)
 
 
+def _drain_hit_die(args: dict, scope: EffectScope) -> None:
+    """Burn `amount` (default 1) Hit Dice off the target — the Pyre Weird's
+    life-force drain. Hit Dice are the weird's *timer*, not damage: at 0 its
+    Consume finisher unlocks (`hit_dice(target) == 0`). Floors at 0."""
+    n = int(args.get("amount", 1))
+    scope.target.hit_dice_remaining = max(0, scope.target.hit_dice_remaining - n)
+    # Feeding satisfies the weird's Guttering check for this turn (system.
+    # `_tick_sustain` reads this) — a drained victim is fuel, so it doesn't need
+    # to be standing in fire.
+    scope.source.turn_scratch["drained_hit_die"] = True
+
+
+def _instant_death(args: dict, scope: EffectScope) -> None:
+    """Kill outright — no death saves, no corpse (the Pyre Weird's Pyre's Due:
+    "revivable only by True Resurrection or Wish"). Sets damage past 0 and
+    stamps three death-save failures so `is_dead` is true and no later heal or
+    stabilize can walk it back."""
+    target = scope.target
+    if target is None or target.is_dead:
+        return
+    target.current_damage = max(target.current_damage, target.hp)
+    target.death_save_successes = 0
+    target.death_save_failures = 3
+
+
+def _create_hazard(args: dict, scope: EffectScope) -> None:
+    """Drop a persistent fire region (the Pyre Elemental's Falling Debris) —
+    a `radius`-ft sphere of `damage` centered on the effect's target (or the
+    source if it has no target), lasting `duration` rounds (omit = permanent).
+    Anyone starting a turn inside it burns (`system._tick_hazards`)."""
+    from .hazards import Hazard
+    ctx = scope.ctx
+    center = None
+    if scope.target is not None and scope.target.coord is not None:
+        center = scope.target.coord
+    elif scope.source is not None:
+        center = scope.source.coord
+    if center is None:
+        return
+    duration = args.get("duration")
+    expires = None if duration is None else ctx.round_index + int(duration)
+    ctx.battlefield.hazards.add(Hazard(
+        center=center, radius_ft=args["radius"], damage=args["damage"],
+        damage_type=args.get("damage_type", "fire"),
+        expires_round=expires, tag=args.get("name", "fire")))
+
+
 def _grant_temp_hp(args: dict, scope: EffectScope) -> None:
     """Temporary hit points (the Constable's Rally). RAW they never stack: a
     new grant only replaces the current pool if it's larger."""
@@ -354,4 +401,7 @@ _DISPATCH: dict[str, Callable[[dict, EffectScope], None]] = {
     "mark_turn": _mark_turn,
     "spend_resource": _spend_resource,
     "grant_temp_hp": _grant_temp_hp,
+    "create_hazard": _create_hazard,
+    "drain_hit_die": _drain_hit_die,
+    "instant_death": _instant_death,
 }

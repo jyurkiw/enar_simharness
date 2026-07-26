@@ -127,6 +127,123 @@ party anyway.
 This supersedes the grim "79-82% effective TPK" read from the pre-subdue model:
 that was measuring death-save dying, which the guards no longer inflict.
 
+## P5 — THE FIRE IS IN (2026-07). It changes the phase-1 answer completely.
+
+The Pyre Elemental now ignites on round 2 (Mathieu's lantern), in full attack
+mode, on top of the 18-guard fight. 200 trials, rush-to-the-stage party:
+
+| measure | guards only (before) | **+ fire (now)** |
+|---|---|---|
+| rounds to resolve | 10.6 | **3.5** |
+| party HP spent | 98% | 100% |
+| SUBDUED -> phase 2 | 85.5% | **100%** |
+| ...**cleanly** (all KO'd & stable) | **85.5%** | **0%** |
+| a PC left DYING on death saves | 0% | **99.5%** |
+| a PC actually DIES | 0.0% | **16.5%** |
+| mean PCs dead | 0.00 | 0.20 |
+
+Elemental damage to the PCs: **222 per trial** (debris 131, enflame 51, fire
+ticks 39) — several times what 27 guards manage. It also mauls its own side:
+**14.6 of 27 guards down** at the end, which is faithful to the d12 table (6 of
+its 12 outcomes target guards) and is exactly the "indiscriminate force of
+nature" the scene wants.
+
+### The finding that matters: fire breaks the clean hand-off
+
+The subdue rule exists so a beaten party wakes up *manacled, not dead*. **Fire
+doesn't subdue.** Once it ignites, it — not the guards — becomes the thing that
+drops PCs, so instead of 85% clean knockouts we get **99.5% of trials with
+someone bleeding out** and **16.5% with an outright death before phase 2 even
+starts**.
+
+This is not a bug and not a modeling artifact: the prose says so explicitly —
+subdual "will not, however, protect PCs from falling debris or spreading fires."
+It's the design working as written. What the number adds is *how much* it bites:
+the fight collapses from ~11 rounds to **3.5**, and the intended "you wake up in
+manacles" outcome now arrives with a body or two on the floor.
+
+**Worth a decision, not a fix** (all three are legitimate; the sim can price any
+of them):
+1. **Accept it** — the fire is meant to be a killer, one death per ~5 runs is the
+   price of a burning building, and the prose's "PCs reduced to 0 wake up with 1
+   hit point" arguably covers everyone at 0 regardless of cause.
+2. **Light the fire later** (round 3-4) so the guards get to finish subduing
+   first, preserving the clean capture and making the fire a phase-2 problem.
+3. **Aim it at the guards early** — narratively it's "encompassing the entire
+   building", not hunting the party; weighting its first rounds toward the guard
+   ranks would keep the pressure without stealing the capture.
+
+Not softened here, per the standing call: publish the hard number, let the DM
+ease off. Levers 2 and 3 are one-line changes if you want them.
+
+### RETUNE: -1d6 on every elemental attack barely moves phase 1
+
+`drop_d6 = 1` (Falling Debris 4d6->3d6 and its fire 2d6->1d6, Large 8d6->7d6 /
+4d6->3d6, Enflame 4d6->3d6), 200 trials:
+
+| measure | full dice | **-1d6** |
+|---|---|---|
+| elemental damage to PCs | 222 | **207** (-7%) |
+| rounds to resolve | 3.5 | **4.2** |
+| clean subdual | 0% | 0% |
+| a PC actually dies | 16.5% | **22.0%** |
+| mean PCs KO'd & stable | 0.92 | 1.45 |
+
+**Cutting the dice did not make phase 1 safer, and may have made it slightly
+worse.** The reason is structural: total damage here is bounded by the party's
+hit points (~232), not by the elemental's dice — the fight runs until the party
+is down either way, so weaker hits just mean *more rounds of hits*. The party
+buys ~0.7 extra rounds and spends them being on fire.
+
+(The death-rate rise 16.5% -> 22.0% is about 2 standard errors at 200 trials —
+suggestive, not conclusive. The safe reading is "no improvement", not "actively
+worse".)
+
+### TIMING SWEEP: when should the elemental start attacking?
+
+Two clocks are now separate and TOML-configurable on the hazard actor:
+`start_round` (the lantern falls — fire on the board) and **`attack_round`** (it
+becomes a monster: debris, Enflame, legendary actions). Swept with
+`elemental_timing_report.py`, 150 trials each:
+
+| attack_round | rounds | reached stage | PC dies | clean subdual | guards down | fire dmg to PCs | closest PC |
+|---|---|---|---|---|---|---|---|
+| 2 *(= 4; clamped)* | 7.0 | 0% | **19%** | 2% | 17.8 | 156 | row 41 |
+| 4 | 7.0 | 0% | **19%** | 2% | 17.8 | 156 | row 41 |
+| 6 | 7.3 | 0% | 4% | 1% | 15.3 | 110 | row 39 |
+| 8 | 8.3 | 0% | 0% | 3% | 13.5 | 72 | row 35 |
+| 10 | 9.8 | 1% | 1% | 37% | 13.2 | 25 | row 29 |
+| **never** | 10.5 | **15%** | 1% | **84%** | 11.4 | 0 | row 26 |
+
+**HYPOTHESIS REFUTED.** The prediction was that delaying the elemental would make
+things *worse* for the PCs, since it's the only thing that hurts the guards.
+Half of that is true — guards down falls 17.8 -> 11.4 without it — but it is
+swamped: the elemental spends **156 damage on the PCs** to buy them ~6 dead
+guards. Delay improves every PC metric monotonically (deaths 19% -> 1%, clean
+subdual 2% -> 84%, northernmost reach row 41 -> 26). **The party does not need
+the elemental's help killing guards; it needs the elemental to leave them alone.**
+
+Two mechanical notes from the sweep:
+* `attack_round` 2 and 4 are identical because `start_round = 4` gates the actor
+  waking at all. To attack earlier, `start_round` must move too.
+* **The lantern fire is currently inert.** At `never`, fire damage to PCs is
+  **0** — `ignite_at` is the stage (row 8) and the party never gets north of row
+  26. So the round-4 ignition is pure scenery today; *all* the fire's bite comes
+  from debris once it starts attacking. To make the burning building pressure
+  the party during the guard fight, the fire has to start where the FIGHT is
+  (the southern seats), not on the stage.
+
+**And the finding underneath all of it:** even with the elemental switched off
+entirely, only **15%** of trials reach the stage. The elemental was never the
+blocker — 18+ guards and 60 rows of difficult terrain are. If "fight your way to
+Nico" is meant to be achievable, the lever is guard placement or the party's
+entry point, not the fire's timing.
+
+**So if phase 1's fire needs to be less punishing, the dice are the wrong lever.**
+Use the timing/targeting levers above (light it round 3-4, or aim its opening
+rounds at the guards) — those change how many rounds the party spends exposed,
+which is what actually drives the number.
+
 ## Open levers (deferred, per "let's see how things turn out first")
 
 1. Make the pit waves matter — ranged weapons, closer/side entrances, or a party

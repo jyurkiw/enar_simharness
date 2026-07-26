@@ -1,0 +1,175 @@
+# SIM B — "the guards beat you down" branch: PHASE 2, ESCAPING THE BURNING HOUSE.
+#
+# The party lost the guard fight. They wake at 1 hit point, manacled, on the
+# floor near the stage, dragged there next to Nico. The nobles have fled and
+# barred the west door. The building is burning. The only way out is the
+# southern door they came in by — the whole length of the house away — and the
+# Pyre Elemental has put Pyre Weirds between them and it.
+#
+#   THE QUESTION: can they get out, or do they die in the fire?
+#
+# This is the sim where deaths finally happen by design. The guards' subdue rule
+# does NOT apply here: fire is environmental (always lethal) and a Pyre Weird's
+# Pyre's Due kills outright. See sims/opera_house/PLAN.md P4.
+#
+# ---------------------------------------------------------------- the opening
+# `[wake_up]` authors the starting state directly rather than simulating the
+# phase-1 hand-off (PLAN's core simplification — two states, no continuous
+# transition):
+#   * every PC at 1 HP, then spending 3 Hit Dice healing ("may spend up to half
+#     of their hit dice") — which leaves them ~20 HP and, crucially, only ~3 HD
+#     left, so the Pyre Weird's drain-to-Consume timer is ~3 rounds instead of 6.
+#   * all 5 manacled ("the guards will place them all in manacles"). Getting out
+#     is an ACTION: automatic with a manacle key, else a near-hopeless DC 20.
+#
+# ------------------------------------------------------------------ the enemy
+# The elemental runs in `mode = "smolder"` — the prose's own rule for this
+# phase: it "will stop attacking anyone in the front of the house like the PCs.
+# It will, however, spawn three Pyre Weirds in the main room between the PCs and
+# the last remaining exit." This is NOT a softening: measured at full aggression
+# it drops a standing party in ~3 rounds (PLAN P3, measurement 1), which would
+# make the escape an execution rather than a fight.
+#
+# --------------------------------------------------------------- what's cut
+#   * Nico (a rescue objective, not a threat), Mélisse/Guy/Véronique (gone).
+#   * The 3 retreat-cover Slingers (they leave with the nobles by round 5).
+#   * Light obscurement everywhere: flavor here — nothing in this sim depends on
+#     sight (the weirds are adjacent, the exit is a known direction).
+#   * NOTHING ELSE. In particular there is NO FIRE ON THE BOARD — see below.
+name = "opera_house_escape"
+description = "Phase 2: the beaten party wakes manacled and must escape the burning opera house"
+
+board = "lib:opera_house"
+
+[simulation]
+trials = 10                 # LOW while developing — raise once it behaves
+max_rounds = 25             # a safety cap; the trial ends on escape or a wipe
+seed = 20260726
+grapple_escape = true
+
+# Wake at 1 HP, heal with half your Hit Dice, and everyone is in irons.
+# `has_key` is THE dial this sim exists to measure (Martinique's advice).
+[wake_up]
+side = "party"
+hp = 1
+heal_hit_dice = 3
+bound_condition = "manacled"
+bound_count = 5
+escape_dc = 20
+has_key = false
+
+# Out the south door — the way they came in. `direction = "south"` is the
+# inverse of sims/opera_house's push toward the stage.
+[objective]
+reach_y = 76
+direction = "south"
+# The question is "can we ALL get out", not "did anyone". Arrivals leave the
+# board and the trial runs until every survivor is out or down — without this
+# the trial would end on the first escapee and "all escaped" would read 0%
+# by construction.
+require_all = true
+
+# NO FIRE HAZARDS IN THIS PHASE — deliberate, and the core of the model.
+# The party is inside "the belly of the beast", and the elemental does not shoot
+# projectiles into its own stomach: falling wreckage and obstacle fires here are
+# NARRATIVE ONLY. The only source of fire anywhere is the elemental throwing
+# wreckage, and it is throwing none at the front of house. So the elemental's
+# sole mechanical job in this phase is to keep putting Weirds between the party
+# and the door.
+#
+# This is what makes phase 2 a pure WEIRD fight: grapple, drain Hit Dice,
+# Pyre's Due. Exactly the danger the design wants.
+[[hazard_actors]]
+name = "pyre_elemental"
+handler = "python:dnd5e_behaviors.pyre_elemental.PyreElementalDriver"
+initiative = 20
+mode = "smolder"
+max_weirds = 3              # "spawn three Pyre Weirds in the main room"
+summon_at = [21, 38]        # mid-aisle, between the party and the door. With no
+                            # fire to rise from, the smoke carries them instead.
+# Summoned weirds get the same unshackling as the placed ones (see below).
+[hazard_actors.weird_overrides.sustain]
+disabled = true
+[hazard_actors.weird_overrides.stats]
+speed = 40
+ignores_difficult_terrain = true
+
+# ------------------------------------------------------------------- the party
+# Dragged to the stage: they start at the north end, in the pit/stage area.
+[[combatants]]
+creature = "champion_fighter_l6"
+side = "party"
+start = [18, 16]
+
+[[combatants]]
+creature = "hunter_ranger_l6"
+side = "party"
+start = [19, 16]
+
+[[combatants]]
+creature = "thief_rogue_l6"
+side = "party"
+start = [20, 16]
+
+[[combatants]]
+creature = "life_cleric_l6"
+side = "party"
+start = [21, 16]
+
+[[combatants]]
+creature = "evoker_wizard_l6"
+side = "party"
+start = [22, 16]
+
+# Two weirds already between the party and the exit (the elemental adds a third
+# via its legendary Summon). They sit in the aisle the party must run down.
+[[combatants]]
+creature = "pyre_weird"
+name = "weird_north"
+side = "monsters"
+start = [20, 30]
+
+[[combatants]]
+creature = "pyre_weird"
+name = "weird_south"
+side = "monsters"
+start = [21, 45]
+
+# The `manacled` condition definition has to be in the workspace registry, and
+# it normally arrives with a Cartel Vise — none here, so a party member carries
+# the definition. `neutralizes` is OFF: nothing in this phase cares about guard
+# targeting, and the weirds must still be able to grab a bound PC.
+# THE WEIRDS' LIMITATIONS ARE REMOVED (the prose: "the air will be filled with
+# so much smoke the Pyre Weirds do not need to check for death for being outside
+# of a fire and gain a 40-foot fly speed"):
+#   * `sustain.disabled` — no Guttering. The smoke sustains them, so they no
+#     longer need a fire to stand in (and there is none).
+#   * speed 40 + `ignores_difficult_terrain` — they FLY. The opera house floor
+#     is wall-to-wall chairs (difficult terrain), so the weirds drift over it at
+#     full speed while the PCs slog through at half. This is a much bigger deal
+#     than the raw +10 ft suggests and is the main reason they can now catch a
+#     fleeing party.
+# HIT-DICE DRAIN RATE — the knob. The weird's drain is an effect argument, so a
+# sim can retune it without touching the statblock. 1/round is the statblock's
+# own rate; `drain_rate_report.py` sweeps 1/2/3 to find the rate at which the
+# drain (and its Consume finisher) actually becomes the encounter's threat
+# rather than decoration. Both lists must be set together — a save doesn't stop
+# the drain, it only exists to roll the fire damage.
+[overrides.pyre_weird.abilities.drain]
+on_fail = [ { effect = "drain_hit_die", amount = 1 } ]
+on_success = [ { effect = "drain_hit_die", amount = 1 } ]
+
+[overrides.pyre_weird.sustain]
+disabled = true
+
+[overrides.pyre_weird.stats]
+speed = 40
+ignores_difficult_terrain = true
+
+[overrides.champion_fighter_l6.conditions.manacled]
+grants = [ { effect = "grant_speed_zero" } ]
+expires = "until_cured"
+ends_with_source = false
+
+[output]
+report = ["totals", "survival"]

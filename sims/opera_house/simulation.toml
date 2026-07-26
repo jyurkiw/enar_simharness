@@ -77,6 +77,35 @@ subduing_side = "monsters"
 [objective]
 reach_y = 13
 
+# THE FIRE. "The fire starts on Mathieu's turn in round 2 when he kills the guard
+# Véronique sends after him and the lantern falls onto the stage and shatters...
+# The fire will quickly become a raging Pyre Elemental encompassing the entire
+# burning Opera House."
+#
+# Full ATTACK mode here (unlike phase 2's smolder): it drops Falling Debris on
+# the biggest cluster it can find, rolls its d12 table, and spends legendary
+# actions on Enflame / more debris / summoning Weirds. Most of that lands on
+# GUARDS — there are simply more of them — which is faithful to the table and is
+# the single most interesting thing this sim measures.
+#
+# It is deliberately NOT toned down. A hazard that genuinely threatens the party
+# is the right default to publish; a DM can ease off mid-session, but can't
+# retrofit danger into a fight the text promised would be deadly.
+# TWO CLOCKS, deliberately separate (they're different beats in the fiction):
+#   start_round  — the LANTERN FALLS and the stage catches. The house is burning
+#                  and the fire ticks on anyone in it, but nothing is aimed.
+#   attack_round — the fire "becomes a raging Pyre Elemental": debris, Enflame,
+#                  legendary actions. Scenery before this; monster after.
+# `elemental_timing_report.py` sweeps attack_round to find the best beat.
+[[hazard_actors]]
+name = "pyre_elemental"
+handler = "python:dnd5e_behaviors.pyre_elemental.PyreElementalDriver"
+initiative = 20
+start_round = 4          # the lantern falls (was round 2)
+attack_round = 6         # it turns into a monster two rounds later
+max_weirds = 2
+drop_d6 = 1              # -1d6 on every elemental damage die (see FINDINGS)
+
 # -------------------------------- the party ---------------------------------
 [[combatants]]
 creature = "champion_fighter_l6"

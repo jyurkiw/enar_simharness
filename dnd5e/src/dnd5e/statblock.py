@@ -210,6 +210,19 @@ class Stats:
     skills: dict = field(default_factory=dict)
     darkvision: int = 0
     passive_perception: int = 10
+    # Damage-type and condition defenses (P1). Immunity zeroes the damage;
+    # resistance halves it; vulnerability doubles it — applied by
+    # `CombatContext.deal`/`environmental_damage`. A condition-immune creature
+    # simply never receives that condition (`apply_condition`). The Pyre Weird is
+    # fire-immune, cold-vulnerable, and immune to grappled/prone/etc.
+    resistances: frozenset = frozenset()
+    vulnerabilities: frozenset = frozenset()
+    immunities: frozenset = frozenset()
+    condition_immunities: frozenset = frozenset()
+    # Flight (or freedom of movement): difficult terrain costs normal movement.
+    # A Pyre Weird with the escape phase's smoke-borne fly speed drifts over the
+    # opera house's chairs while the PCs slog through them at half rate.
+    ignores_difficult_terrain: bool = False
 
     def modifier(self, ability: str) -> int:
         """Ability modifier derived from the raw score: floor((score-10)/2)."""
@@ -235,6 +248,17 @@ class Statblock:
     # role like "breaker" belongs on the statblock; scenario-only tags go on the
     # combatant entry.
     tags: tuple[str, ...] = ()
+    # Pyre's Due: a creature reduced to 0 HP *while this creature is grappling
+    # it* dies instantly — no death saves, no corpse. Checked by
+    # `actions._sync_hp_conditions` against the victim's grappler, so it applies
+    # regardless of what actually dealt the killing blow (fire, a guard's club,
+    # the weird itself) and overrides a `subduing_side` knockout.
+    kills_captive_at_zero: bool = False
+    # Guttering: `{hazard_type, save_ability, save_dc}`. At the end of its turn a
+    # creature with this must be standing in a hazard of `hazard_type` (or have
+    # fed this turn — `turn_scratch["drained_hit_die"]`) or make the save or die.
+    # The water-weird-out-of-water pattern, generally. None = no upkeep.
+    sustain: Optional[dict] = None
     # Agent-scoped target reservation: if non-empty, ONLY agents carrying one of
     # these tags may target this creature, and those agents *prioritize* it.
     # Everyone else ignores it. (The confessio seal is `engaged_by = ["breaker"]`

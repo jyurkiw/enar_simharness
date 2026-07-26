@@ -46,6 +46,12 @@ class Creature:
     # ---- mutable per-trial state (reset by reset_state()) --------------------
     hp: int = field(default=1, init=False)
     current_damage: int = field(default=0, init=False)
+    # Hit Dice remaining — a *rest* resource equal to character level, and the
+    # Pyre Weird's drain timer (`drain_hit_die`; at 0 the weird's Consume
+    # finisher unlocks). Seeded by `system._prime` from `classification.level`;
+    # a sim can pre-spend some to model "spent half your HD healing on waking"
+    # (sims/opera_house phase 2). 0 for monsters, which nothing drains.
+    hit_dice_remaining: int = field(default=0, init=False)
     # Temporary hit points (the Constable's Rally). A separate pool that soaks
     # damage before `current_damage` grows; RAW they never stack — a fresh
     # grant replaces the old one only if it's larger.
@@ -146,6 +152,7 @@ class Creature:
         self.current_damage = 0
         self.damage_total = 0
         self.temp_hp = 0
+        self.hit_dice_remaining = int(self.statblock.classification.get("level", 0))
         self.conditions = []
         self.death_save_successes = 0
         self.death_save_failures = 0

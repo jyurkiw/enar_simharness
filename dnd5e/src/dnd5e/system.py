@@ -79,6 +79,51 @@ def _spend_costs(actor: Creature, ability) -> None:
         actor.resources[name] = max(0, actor.resources[name] - costs.get("amount", 1))
 
 
+class HazardView:
+    """What a hazard actor's driver gets to work with (design: the Pyre
+    Elemental). Deliberately narrow — a bodiless force reads the board, damages
+    creatures, drops hazards and spawns minions; it has no position, no HP, and
+    no conditions of its own.
+
+    `scratch` is per-trial driver state (legendary uses left, recharge status,
+    how many minions are out), keyed off the GameState so it resets each trial
+    without the driver holding any state itself (drivers are cached and shared,
+    exactly like escape-hatch brains)."""
+
+    def __init__(self, system, ctx, game, spec) -> None:
+        self.system = system
+        self.ctx = ctx
+        self.game = game
+        self.spec = spec
+        self.battlefield = game.battlefield
+        self.combat = game.combat_ctx
+        self.resolver = game.combat_ctx.resolver
+        self.round_index = ctx.round_index
+        self.config = spec.config
+
+    @property
+    def scratch(self) -> dict:
+        return self.game.hazard_scratch.setdefault(self.spec.name, {})
+
+    def creatures(self, *, side: Optional[str] = None, alive_only: bool = True) -> list:
+        out = [c for c in self.battlefield.creatures.values()
+               if side is None or c.side == side]
+        if alive_only:
+            out = [c for c in out if not c.is_down and c.coord is not None]
+        return out
+
+    def add_hazard(self, center: tuple, radius_ft: float, damage: str, *,
+                   damage_type: str = "fire", duration: Optional[int] = None,
+                   tag: str = "fire") -> None:
+        from .hazards import Hazard
+        expires = None if duration is None else self.ctx.round_index + int(duration)
+        self.battlefield.hazards.add(Hazard(center=center, radius_ft=radius_ft, damage=damage,
+                                            damage_type=damage_type, expires_round=expires, tag=tag))
+
+    def spawn(self, statblock, instance_name: str, side: str, coord: tuple):
+        return self.system.spawn_creature(self.ctx, statblock, instance_name, side, coord)
+
+
 @dataclass(frozen=True)
 class RosterSlot:
     """One creature to place on the board, with its spawn point already
@@ -100,6 +145,12 @@ class GameState:
     creatures: dict            # instance_name -> Creature
     turn_order: list           # instance_name, in initiative order
     flags: FlagBag = field(default_factory=FlagBag)
+    # Per-trial scratch for hazard-actor drivers (legendary uses, recharges,
+    # minion counts) — drivers are cached and shared, so their state lives here.
+    hazard_scratch: dict = field(default_factory=dict)
+    # Names that have left the board via a `require_all` objective (out the
+    # door). They stop acting, stop burning, and stop counting as "still here".
+    escaped: set = field(default_factory=set)
     light_produced: bool = False   # `light_plan` fires at most once per trial
     retreat_started: Optional[int] = None   # round the party began its extraction retreat
 
@@ -109,7 +160,9 @@ class Dnd5eSystem:
                  focus: Optional[dict] = None, obscurement: tuple = (),
                  light_plan: Optional[object] = None, reinforcements: tuple = (),
                  extraction: Optional[object] = None, grapple_escape: bool = False,
-                 objective: Optional[object] = None, subduing_side: Optional[str] = None) -> None:
+                 objective: Optional[object] = None, subduing_side: Optional[str] = None,
+                 hit_dice_spent: int = 0, hazard_actors: tuple = (),
+                 wake_up: Optional[object] = None, initial_hazards: tuple = ()) -> None:
         self.board = board
         self.roster = roster
         self.max_rounds = max_rounds
@@ -124,6 +177,20 @@ class Dnd5eSystem:
         # `[simulation] subduing_side`: this side knocks foes out cold (stable)
         # instead of killing — see CombatContext. None for lethal combat.
         self.subduing_side = subduing_side
+        # `[simulation] hit_dice_spent`: start every leveled creature this many
+        # Hit Dice down — the opera-house phase 2 wakes its PCs after they've
+        # "spent up to half their hit dice to heal", which shortens the Pyre
+        # Weird's drain timer to Consume. 0 = everyone starts full.
+        self.hit_dice_spent = hit_dice_spent
+        # `[[hazard_actors]]` (loader.HazardActorSpec, duck-typed): bodiless
+        # forces with an initiative slot — the Pyre Elemental. Never Creatures,
+        # so they can't be targeted, killed, or counted for a side wipe.
+        self.hazard_actors = tuple(hazard_actors)
+        # `[wake_up]` (loader.WakeUpSpec): start a side beaten and bound — the
+        # opera house's phase 2. None for an ordinary fight.
+        self.wake_up = wake_up
+        # `[[initial_hazards]]`: fires already burning when the trial opens.
+        self.initial_hazards = tuple(initial_hazards)
         self.focus = dict(focus or {})
         # `[extraction]` (loader.ExtractionSpec, duck-typed): a smash-and-grab
         # objective + retreat. None for ordinary deathmatch sims.
@@ -180,6 +247,9 @@ class Dnd5eSystem:
         # sort by value alone preserves that order among equal rolls).
         rolled = [(c.instance_name, resolver.roll("1d20") + c.statblock.stats.initiative_bonus)
                  for c in creatures]
+        # Hazard actors take an initiative slot like anything else, but they're
+        # not creatures — `take_turn` dispatches them to their driver.
+        rolled.extend((spec.name, spec.initiative) for spec in self.hazard_actors)
         rolled.sort(key=lambda pair: pair[1], reverse=True)
         turn_order = [name for name, _ in rolled]
 
@@ -188,6 +258,37 @@ class Dnd5eSystem:
             creatures={c.instance_name: c for c in creatures}, turn_order=turn_order,
             flags=flags,
         )
+        self._seed_hazards(battlefield)
+        self._apply_wake_up(ctx.game, resolver)
+
+    def _seed_hazards(self, battlefield) -> None:
+        """`[[initial_hazards]]`: the building is already alight when the trial
+        opens. Permanent by default — this is a structure fire, not a spell."""
+        from .hazards import Hazard
+        for h in self.initial_hazards:
+            battlefield.hazards.add(Hazard(
+                center=tuple(h["center"]), radius_ft=h["radius"], damage=h["damage"],
+                damage_type=h.get("damage_type", "fire"),
+                expires_round=h.get("expires_round"), tag=h.get("name", "fire")))
+
+    def _apply_wake_up(self, game: GameState, resolver) -> None:
+        """`[wake_up]`: the side starts beaten — dropped to `hp`, having spent
+        `heal_hit_dice` Hit Dice patching themselves up, with the first
+        `bound_count` of them in irons. This is the opera house's phase-2 opening
+        state, authored directly rather than simulated from phase 1."""
+        spec = self.wake_up
+        if spec is None:
+            return
+        for c in game.battlefield.members(spec.side):
+            c.current_damage = max(0, c.hp - spec.hp)
+            spend = min(spec.heal_hit_dice, c.hit_dice_remaining)
+            for _ in range(spend):
+                c.hit_dice_remaining -= 1
+                healed = max(1, resolver.roll("1d8") + c.statblock.stats.modifier("constitution"))
+                c.current_damage = max(0, c.current_damage - healed)
+        if spec.bound_condition:
+            for c in game.battlefield.members(spec.side)[:spec.bound_count]:
+                game.combat_ctx.apply_condition(c, spec.bound_condition)
 
     def _prime(self, creature: Creature, combat_ctx, resolver) -> None:
         """Roll HP, seed resource pools, and apply passive traits — everything a
@@ -196,6 +297,10 @@ class Dnd5eSystem:
         are built fresh per trial and reset_state is never called — a monk's ki
         gate was silently always-false before this.)"""
         creature.roll_hp(resolver, mode=self.hp_mode)
+        # Hit Dice = character level (0 for monsters). The Pyre Weird's drain
+        # timer; a sim may pre-spend some via `[hit_dice_spent]`.
+        creature.hit_dice_remaining = max(
+            0, int(creature.statblock.classification.get("level", 0)) - self.hit_dice_spent)
         for name, resource in creature.statblock.resources.items():
             creature.resources[name] = resource.uses
         for trait in creature.statblock.traits.values():
@@ -251,21 +356,75 @@ class Dnd5eSystem:
         self._spawn_reinforcements(ctx)
         self._check_extraction(ctx)
         game.battlefield.refresh_auras(ctx.round_index)
+        game.battlefield.hazards.prune(ctx.round_index)
         self._sync_obscurement(game)
         return game.turn_order
 
     def take_turn(self, ctx: TrialContext, actor_id: str) -> None:
         game: GameState = ctx.game
-        actor = game.creatures[actor_id]
         game.combat_ctx.round_index = ctx.round_index
         game.combat_ctx.turn_order = game.turn_order
 
+        spec = self._hazard_actor(actor_id)
+        if spec is not None:
+            self._take_hazard_turn(ctx, spec, game)
+            return
+
+        actor = game.creatures[actor_id]
         self._tick_start_of_turn(actor, game)
+        self._tick_hazards(actor, game, ctx)
         actor.turn_scratch.clear()
         try:
             self._take_turn_body(ctx, actor, game)
         finally:
+            self._tick_sustain(actor, game, ctx)
             self._tick_end_of_turn(actor, game, ctx.round_index)
+            self._offer_legendary(ctx, game, after=actor)
+
+    # ---- hazard actors (bodiless environmental forces) -------------------------
+
+    def _hazard_actor(self, actor_id: str):
+        return next((s for s in self.hazard_actors if s.name == actor_id), None)
+
+    def _driver(self, spec):
+        return escape_hatch.resolve(spec.handler)
+
+    def _take_hazard_turn(self, ctx: TrialContext, spec, game: GameState) -> None:
+        """A hazard actor's own turn. Its driver gets a view of the world and a
+        handle back on this system (for spawning); it has no body, so none of
+        the creature turn pipeline (conditions, movement, sustain) applies."""
+        if ctx.round_index < spec.start_round:
+            return
+        self._driver(spec).take_turn(HazardView(self, ctx, game, spec))
+
+    def _offer_legendary(self, ctx: TrialContext, game: GameState, *, after: Creature) -> None:
+        """"Immediately after another creature's turn" — offer each awake hazard
+        actor its legendary actions. A driver without a `legendary` hook is
+        skipped, so this is free for ordinary hazard actors."""
+        for spec in self.hazard_actors:
+            if ctx.round_index < spec.start_round:
+                continue
+            driver = self._driver(spec)
+            hook = getattr(driver, "legendary", None)
+            if hook is not None:
+                hook(HazardView(self, ctx, game, spec), after)
+
+    def spawn_creature(self, ctx: TrialContext, statblock, instance_name: str, side: str,
+                       coord: tuple, tags: tuple = ()) -> Optional[Creature]:
+        """Mid-trial arrival, shared by reinforcement waves and a hazard actor's
+        summon (the Pyre Elemental calling up a Weird). Joins the battlefield and
+        the tail of the initiative order, acting from this round on."""
+        game: GameState = ctx.game
+        if instance_name in game.creatures:
+            return None
+        c = Creature(statblock=statblock, instance_name=instance_name, side=side, tags=tags)
+        c.place(*coord)
+        game.battlefield.creatures[instance_name] = c
+        game.creatures[instance_name] = c
+        self.condition_defs.update(statblock.conditions)
+        self._prime(c, game.combat_ctx, game.combat_ctx.resolver)
+        game.turn_order.append(instance_name)
+        return c
 
     def _try_escape_grapple(self, actor: Creature, game: GameState) -> bool:
         """RAW 2024: escaping a grapple costs your **action** — a check against
@@ -308,6 +467,8 @@ class Dnd5eSystem:
         return True
 
     def _take_turn_body(self, ctx: TrialContext, actor: Creature, game: GameState) -> None:
+        if actor.instance_name in game.escaped:
+            return                      # already outside; nothing left to do
         if actor.is_down:
             self._roll_death_save(actor, game.combat_ctx)
             return
@@ -334,8 +495,11 @@ class Dnd5eSystem:
         option = select_multiattack(actor, behavior_ctx)
 
         # A party member with a reach-a-zone `[objective]` pushes toward the
-        # stage instead of running its normal tactic (see `_advance_to_stage`).
+        # zone instead of running its normal tactic (see `_advance_to_stage`).
+        # Getting out of your irons comes first — you can't run in manacles.
         if self.objective is not None and actor.side == self.objective.party_side:
+            if self._try_break_bonds(actor, game):
+                return
             self._advance_to_stage(ctx, actor, option, game, behavior_ctx)
             return
 
@@ -371,8 +535,50 @@ class Dnd5eSystem:
             _spend_costs(actor, ability)
 
     def _reached_objective(self, actor: Creature) -> bool:
-        return (self.objective is not None and actor.coord is not None
-                and actor.y <= self.objective.reach_y)
+        if self.objective is None or actor.coord is None:
+            return False
+        if self.objective.direction == "south":
+            return actor.y >= self.objective.reach_y
+        return actor.y <= self.objective.reach_y
+
+    def _try_break_bonds(self, actor: Creature, game: GameState) -> bool:
+        """A bound creature spends its ACTION on the irons — either its own, or
+        (if it's free) an adjacent ally's. Returns True when the turn went on it.
+
+        Two outs, matching the encounter's design: the party brought a manacle
+        key (`has_key` — Martinique's advice), in which case unlocking is
+        automatic; or a raw DC 20 Dexterity attempt, which is the near-impossible
+        trap. A *free* member can always spend its action on a bound ally, which
+        is the intended "someone frees the others" path."""
+        spec = self.wake_up
+        if spec is None or not spec.bound_condition or actor.side != spec.side:
+            return False
+        cond = spec.bound_condition
+
+        if actor.has_condition(cond):
+            if spec.has_key or self._bond_check(actor, game, spec):
+                game.combat_ctx.remove_condition(actor, cond)
+                actor.trial_scratch["freed_self"] = True
+            return True
+
+        # Free: unlock the nearest bound ally in reach (needs the key, or picks
+        # the lock at the same DC).
+        bound = [a for a in game.battlefield.members(spec.side)
+                 if a is not actor and not a.is_down and a.has_condition(cond)
+                 and (game.battlefield.distance_ft(actor, a) or 999) <= spec.free_ally_range]
+        if not bound:
+            return False
+        ally = bound[0]
+        if spec.has_key or self._bond_check(actor, game, spec):
+            game.combat_ctx.remove_condition(ally, cond)
+            ally.trial_scratch["freed_by_ally"] = True
+        return True
+
+    @staticmethod
+    def _bond_check(actor: Creature, game: GameState, spec) -> bool:
+        stats = actor.statblock.stats
+        bonus = stats.modifier("dexterity") + stats.proficiency
+        return game.combat_ctx.resolver.roll("1d20") + bonus >= spec.escape_dc
 
     def _advance_to_stage(self, ctx: TrialContext, actor: Creature, option, game: GameState,
                           behavior_ctx) -> None:
@@ -392,6 +598,12 @@ class Dnd5eSystem:
             movement.move_to_cell(actor, (actor.x, self.objective.reach_y), game.battlefield)
             self._offer_opportunity_attacks(actor, before, actor.coord, game, ctx)
         if self._reached_objective(actor):
+            if self.objective.require_all:
+                # Out the door: this one is safe and off the board. The trial
+                # runs on until every survivor is out or down.
+                game.escaped.add(actor.instance_name)
+                actor.trial_scratch["escaped_round"] = ctx.round_index
+                return
             game.combat_ctx.end_trial(outcome={"reached_stage": 1, "reach_round": ctx.round_index})
             return
         if option is None:
@@ -410,7 +622,7 @@ class Dnd5eSystem:
             return True
         sides = {c.side for c in game.creatures.values()}
         return any(
-            members and all(m.is_down for m in members)
+            members and all(m.is_down or m.instance_name in game.escaped for m in members)
             for members in (game.battlefield.members(side) for side in sides)
         )
 
@@ -508,6 +720,45 @@ class Dnd5eSystem:
                     self._expire_condition(creature, instance)
         self._tick_save_ends(actor, game)
         self._tick_recharges(actor, game)
+
+    def _tick_hazards(self, actor: Creature, game: GameState, ctx: TrialContext) -> None:
+        """Fire burns at the start of a turn: a creature standing in one or more
+        active hazards takes each one's damage (environmental, so lethal — see
+        `CombatContext.environmental_damage`). Skips the already-down (the
+        burning-building design leaves the unconscious to wake, not burn) and
+        stops once a fire drops the actor. Damage typing (fire immunity for the
+        elementals) arrives in P1; for now every creature burns."""
+        if actor.is_down or actor.coord is None or actor.instance_name in game.escaped:
+            return
+        immune = actor.statblock.stats.immunities
+        for hazard in game.battlefield.hazards.covering(actor.coord, ctx.round_index):
+            if hazard.damage_type in immune:
+                continue   # fire-immune (the elementals) — don't even roll
+            amount = game.combat_ctx.resolver.damage(hazard.damage)
+            game.combat_ctx.environmental_damage(actor, amount, tag=hazard.tag,
+                                                 damage_type=hazard.damage_type)
+            if actor.is_down:
+                break
+
+    def _tick_sustain(self, actor: Creature, game: GameState, ctx: TrialContext) -> None:
+        """Guttering (`[sustain]`): at the end of its turn a creature that needs
+        a hazard to live must be standing in one — or have fed this turn
+        (`drained_hit_die`) — or make its save or die. The Pyre Weird starves
+        outside fire, which is what makes dragging a drained victim out of the
+        flames a real counter-tactic (design doc's own emergent note)."""
+        spec = actor.statblock.sustain
+        if spec is None or actor.is_down:
+            return
+        if actor.turn_scratch.get("drained_hit_die"):
+            return
+        kind = spec["hazard_type"]
+        if any(h.damage_type == kind
+               for h in game.battlefield.hazards.covering(actor.coord, ctx.round_index)):
+            return
+        if game.combat_ctx.saving_throw(actor, spec["save_ability"], int(spec["save_dc"])):
+            return
+        actor.current_damage = max(actor.current_damage, actor.hp)   # guttered out
+        actor.death_save_failures = 3
 
     def _tick_save_ends(self, actor: Creature, game: GameState) -> None:
         """"…or succeeds on a DC N <ability> saving throw at the start of each

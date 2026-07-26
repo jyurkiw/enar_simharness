@@ -277,7 +277,7 @@ FUNCTION_NAMES = frozenset({
     "resource_available", "round", "has_flag", "any_yet_to_act", "side_of",
     "enemies_within", "allies_within", "enemies_tagged", "allies_tagged",
     "enemies_within_of", "allies_within_of", "turn_marked", "aoe_targets",
-    "temp_hp", "reaction_available", "is_source_of",
+    "temp_hp", "reaction_available", "is_source_of", "hit_dice",
 })
 
 
@@ -369,6 +369,7 @@ class Scope(Protocol):
     def temp_hp(self, who: Any) -> float: ...
     def reaction_available(self, who: Any) -> bool: ...
     def is_source_of(self, condition: str) -> bool: ...
+    def hit_dice(self, who: Any) -> float: ...
     def aoe_targets(self, ability_name: str) -> int: ...
     def round_number(self) -> int: ...
     def has_flag(self, name: str) -> bool: ...
@@ -506,6 +507,7 @@ _CALL_TABLE: dict[str, Callable[..., Any]] = {
     "is_bloodied": lambda scope, who: scope.is_bloodied(who),
     "is_down": lambda scope, who: scope.is_down(who),
     "temp_hp": lambda scope, who: scope.temp_hp(who),
+    "hit_dice": lambda scope, who: scope.hit_dice(who),
     "reaction_available": lambda scope, who: scope.reaction_available(who),
     "is_source_of": lambda scope, name: scope.is_source_of(name),
     "distance": lambda scope, a, b: scope.distance(a, b),
